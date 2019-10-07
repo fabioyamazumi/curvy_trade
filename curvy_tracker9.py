@@ -189,7 +189,8 @@ class CurvyTrade:
         self.fwd_discount_last = (self.spot_last_XXXUSD / self.fwd_last_XXXUSD - 1) * 12 # signal fwd premium
         print('fwd_discount_last OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
-        self.vols = self._ewma_vol(ewma_lambda=0.94)
+        # self.vols = self._ewma_vol(ewma_lambda=0.94) #  discontinued after version 8
+        self.vols = self._std_vol(window=126)
         self.vols.to_excel(self.data_folder + '\\' + 'vols.xlsx')
         print('vol EWMA OK - ', time.time() - time_start, ' seconds')
         self.currency_list_EM = self.build_currency_list_EM()
@@ -492,13 +493,13 @@ class CurvyTrade:
 
     @staticmethod
     def _build_bday_calendars(start_date, end_date):
-        # TODO proposition: work with all business days, repeating prices (ffill) and rebalancing beggining of month.
+        # TODO DONE: work with all business days, repeating prices (ffill) and rebalancing beggining of month.
         daily_calendar = pd.date_range(start=start_date, end=end_date, freq=BDay())
         return daily_calendar
 
     @staticmethod
     def _build_monthly_calendars(start_date, end_date):
-        # TODO proposition: work with all business days, repeating prices (ffill) and rebalancing beggining of month.
+        # TODO DONE: work with all business days, repeating prices (ffill) and rebalancing beggining of month.
         monthly_calendar = pd.date_range(start=start_date, end=end_date, freq=BMonthEnd())
         return monthly_calendar
 
@@ -629,6 +630,11 @@ class CurvyTrade:
         df_vols = df_vols ** 0.5
         return df_vols
 
+    def _std_vol(self, window=126):
+        df_vols = self.spot_last_XXXUSD.pct_change(1).rolling(window=window).var() * 252
+        df_vols = df_vols ** 0.5
+        return df_vols
+
     def plot_vols(self, figure_size):
         self.vols.multiply(100).plot(figsize=figure_size, title='Vols (annualized 252 bdays)')
         plt.show()
@@ -644,16 +650,18 @@ class CurvyTrade:
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
         [weights, signals] = func_weight(df_ranking, k)  # Daily data
-        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
-        weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini, self.currency_list]
-        signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini, self.currency_list]
+        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
+        weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
+        signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
             pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
-            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[d] / df_forwards.loc[d])
-            weights_used.loc[d, self.currency_list] = weights.loc[d, self.currency_list]
-            signals_used.loc[d, self.currency_list] = signals.loc[d, self.currency_list]
+            dm1 = d - BDay(1)
+            # Adding 1 day delay to weights and signals used for trading
+            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
+            weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
+            signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
         return TR_index, holdings, weights_used, signals_used
 
     def run_default_monthly_strategy(self, df_signals, func_weight, strategy_n=0):
@@ -710,16 +718,18 @@ class CurvyTrade:
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
         [weights, signals] = self._ranking_to_equalvolwgt(df_ranking, df_vol, target_vol, k)
-        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
-        weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini, self.currency_list]
-        signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini, self.currency_list]
+        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
+        weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
+        signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
             pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
-            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[d] / df_forwards.loc[d])
-            weights_used.loc[d, self.currency_list] = weights.loc[d, self.currency_list]
-            signals_used.loc[d, self.currency_list] = signals.loc[d, self.currency_list]
+            dm1 = d - BDay(1)
+            # Adding 1 day delay in weights and signals used for trading
+            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
+            weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
+            signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
         return TR_index, holdings, weights_used, signals_used
 
     def run_equal_vol_monthly_strategy(self, df_signals, target_vol=0.06, strategy_n=0):
@@ -1499,4 +1509,19 @@ class CurvyTrade:
                 currency_list_EM.append(currency)
         self.currency_list_EM = currency_list_EM
         return currency_list_EM
+
+    def beta_USD(self, prices_df, usd_index_name='USD', window=84):
+        # Try reading USD index from all currencies results. It has all three indexes (DM, EM, USD).
+        try:
+            self.USD_index = pd.read_excel('data_ALL\\USD_index.xlsx')
+        except FileNotFoundError:
+            pass
+        return_index_df = prices_df.copy(deep=True)
+        return_index_df.loc[self.USD_index.index, 'USD'] = self.USD_index[str(usd_index_name)]
+        covariances = return_index_df.pct_change(1).rolling(window).cov()
+        covariance_USD = covariances.xs(key='USD', axis=0, level=1)
+        beta_USD_df = pd.DataFrame(data=None, index=covariance_USD.index, columns=covariance_USD.columns)
+        for d in beta_USD_df.index:
+            beta_USD_df.loc[d] = covariance_USD.loc[d] / covariance_USD['USD'].loc[d]
+        return beta_USD_df
 
