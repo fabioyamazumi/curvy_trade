@@ -112,7 +112,11 @@ class CurvyTrade:
     def __init__(self, start_date='1991-01-01', end_date='2019-07-02', k_max=4):
         # Start/End date of strategy
         time_start = time.time()
+        self.total_strategy_number = 10
         self.k_max = k_max
+        self.double_sorting_groups = 3
+        self.double_sorting_subgroups = 2
+        self.signal_moving_avg = 5
         self.k_range, self.k_list = self._build_k_list()
         self.ini_date = pd.to_datetime(start_date)
         self.end_date = pd.to_datetime(end_date)
@@ -139,6 +143,7 @@ class CurvyTrade:
         self.dict_FX_spot = dict(zip(self.currency_list, self.ticker_spot_bbg))
         self.dict_spot_FX = dict(zip(self.ticker_spot_bbg, self.currency_list))
         self.dict_NDF_FX = dict(zip(self.dict_FX_NDF.values(), self.dict_FX_NDF.keys()))
+        self.df_strategy = self.build_strategy_table()
         try:
             # Try to read df_tickers.xlsx, otherwise get from BBG and write to Excel
             df_tickers = pd.read_excel(self.data_folder + '\\' + 'df_tickers.xlsx')
@@ -292,6 +297,29 @@ class CurvyTrade:
             self.relative_curvature_rank.to_excel(self.data_folder + '\\' + 'relative_curvature_rank.xlsx')
         print('ranks OK - ', time.time() - time_start, ' seconds')
 
+    def build_strategy_table(self):
+        list_strat_number = list(range(1, self.total_strategy_number + 1))
+        df_strategy = pd.DataFrame(data=None, index=list_strat_number)
+        strategy_name_dict = {1: 'Carry trade',
+                              2: 'Curvature',
+                              3: 'Level',
+                              4: 'Slope',
+                              5: 'Carry (EV)',
+                              6: 'Curvature (EV)',
+                              7: 'Level (EV)',
+                              8: 'Slope (EV)',
+                              9: 'Carry-Curvy DS',
+                              10: 'Curvy-Carry DS'}
+
+        df_strategy['Name'] = [strategy_name_dict[x] for x in list_strat_number]
+        df_strategy['TR'] = ['TR_df_' + "{:02}".format(x) for x in list_strat_number]
+        df_strategy['holdings'] = ['holdings_df_' + "{:02}".format(x) for x in list_strat_number]
+        df_strategy['weights'] = ['weights_df_' + "{:02}".format(x) for x in list_strat_number]
+        df_strategy['long_short_signals'] = ['long_short_signals_df_' + "{:02}".format(x) for x in list_strat_number]
+        df_strategy['TR_df_daily'] = ['TR_df_daily_' + "{:02}".format(x) for x in list_strat_number]
+        return df_strategy
+
+
     def run_strategy01(self):
         time_start = time.time()
         # Traditional Carry Trade
@@ -304,15 +332,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df                    = df_excel_tr
-            self.holdings_df              = df_excel_holdings
-            self.weights_df               = df_excel_weights
-            self.long_short_signals_df    = df_excel_ls_signals
-            self.TR_df_daily              = dt_excel_daily_pnl
+            self.TR_df_01                    = df_excel_tr
+            self.holdings_df_01              = df_excel_holdings
+            self.weights_df_01               = df_excel_weights
+            self.long_short_signals_df_01    = df_excel_ls_signals
+            self.TR_df_daily_01              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df, self.holdings_df, self.weights_df, self.long_short_signals_df] = self.run_default_monthly_strategy(df_signals=self.fwd_discount_last, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
-            self.TR_df_daily = self.run_daily_pnl(self.holdings_df, strategy_n)
+            [self.TR_df_01, self.holdings_df_01, self.weights_df_01, self.long_short_signals_df_01] = self.run_default_monthly_strategy(df_signals=self.fwd_discount_last, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            self.TR_df_daily_01 = self.run_daily_pnl(self.holdings_df_01, strategy_n)
         print('Carry trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy02(self):
@@ -327,15 +355,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_crv_df                    = df_excel_tr
-            self.holdings_crv_df              = df_excel_holdings
-            self.weights_crv_df               = df_excel_weights
-            self.long_short_signals_crv_df    = df_excel_ls_signals
-            self.TR_crv_df_daily              = dt_excel_daily_pnl
+            self.TR_df_02                    = df_excel_tr
+            self.holdings_df_02              = df_excel_holdings
+            self.weights_df_02               = df_excel_weights
+            self.long_short_signals_df_02    = df_excel_ls_signals
+            self.TR_df_daily_02              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_crv_df, self.holdings_crv_df, self.weights_crv_df, self.long_short_signals_crv_df] = self.run_default_monthly_strategy(df_signals=self.relative_curvature, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
-            self.TR_crv_df_daily = self.run_daily_pnl(self.holdings_crv_df, strategy_n)
+            [self.TR_df_02, self.holdings_df_02, self.weights_df_02, self.long_short_signals_df_02] = self.run_default_monthly_strategy(df_signals=self.relative_curvature, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            self.TR_df_daily_02 = self.run_daily_pnl(self.holdings_df_02, strategy_n)
         print('Curvy trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy03(self):
@@ -350,15 +378,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_lvl_df                    = df_excel_tr
-            self.holdings_lvl_df              = df_excel_holdings
-            self.weights_lvl_df               = df_excel_weights
-            self.long_short_signals_lvl_df    = df_excel_ls_signals
-            self.TR_lvl_df_daily              = dt_excel_daily_pnl
+            self.TR_df_03                    = df_excel_tr
+            self.holdings_df_03              = df_excel_holdings
+            self.weights_df_03               = df_excel_weights
+            self.long_short_signals_df_03    = df_excel_ls_signals
+            self.TR_df_daily_03              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_lvl_df, self.holdings_lvl_df, self.weights_lvl_df, self.long_short_signals_lvl_df] = self.run_default_monthly_strategy(df_signals=self.relative_level, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
-            self.TR_lvl_df_daily = self.run_daily_pnl(self.holdings_lvl_df, strategy_n)
+            [self.TR_df_03, self.holdings_df_03, self.weights_df_03, self.long_short_signals_df_03] = self.run_default_monthly_strategy(df_signals=self.relative_level, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            self.TR_df_daily_03 = self.run_daily_pnl(self.holdings_df_03, strategy_n)
         print('Level trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy04(self):
@@ -373,15 +401,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_slp_df                    = df_excel_tr
-            self.holdings_slp_df              = df_excel_holdings
-            self.weights_slp_df               = df_excel_weights
-            self.long_short_signals_slp_df    = df_excel_ls_signals
-            self.TR_slp_df_daily              = dt_excel_daily_pnl
+            self.TR_df_04                    = df_excel_tr
+            self.holdings_df_04              = df_excel_holdings
+            self.weights_df_04               = df_excel_weights
+            self.long_short_signals_df_04    = df_excel_ls_signals
+            self.TR_df_daily_04              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_slp_df, self.holdings_slp_df, self.weights_slp_df, self.long_short_signals_slp_df] = self.run_default_monthly_strategy(df_signals=self.relative_slope, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
-            self.TR_slp_df_daily = self.run_daily_pnl(self.holdings_slp_df, strategy_n)
+            [self.TR_df_04, self.holdings_df_04, self.weights_df_04, self.long_short_signals_df_04] = self.run_default_monthly_strategy(df_signals=self.relative_slope, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            self.TR_df_daily_04 = self.run_daily_pnl(self.holdings_df_04, strategy_n)
         print('Slope trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy05(self):
@@ -398,15 +426,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df_equal_vol                    = df_excel_tr
-            self.holdings_df_equal_vol              = df_excel_holdings
-            self.weights_df_equal_vol               = df_excel_weights
-            self.long_short_signals_df_equal_vol    = df_excel_ls_signals
-            self.TR_df_equal_vol_daily              = dt_excel_daily_pnl
+            self.TR_df_05                    = df_excel_tr
+            self.holdings_05                 = df_excel_holdings
+            self.weights_df_05               = df_excel_weights
+            self.long_short_signals_df_05    = df_excel_ls_signals
+            self.TR_df_daily_05              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_equal_vol, self.holdings_df_equal_vol, self.weights_df_equal_vol, self.long_short_signals_df_equal_vol] = self.run_equal_vol_monthly_strategy(df_signals=self.fwd_discount_last, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
-            self.TR_df_equal_vol_daily = self.run_daily_pnl(self.holdings_df_equal_vol, strategy_n)
+            [self.TR_df_05, self.holdings_df_05, self.weights_df_05, self.long_short_signals_df_05] = self.run_equal_vol_monthly_strategy(df_signals=self.fwd_discount_last, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
+            self.TR_df_daily_05 = self.run_daily_pnl(self.holdings_df_05, strategy_n)
         print('Equal vol Carry trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy06(self):
@@ -422,15 +450,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df_crv_equal_vol                    = df_excel_tr
-            self.holdings_df_crv_equal_vol              = df_excel_holdings
-            self.weights_df_crv_equal_vol               = df_excel_weights
-            self.long_short_signals_df_crv_equal_vol    = df_excel_ls_signals
-            self.TR_df_crv_equal_vol_daily              = dt_excel_daily_pnl
+            self.TR_df_06                    = df_excel_tr
+            self.holdings_df_06              = df_excel_holdings
+            self.weights_df_06               = df_excel_weights
+            self.long_short_signals_df_06    = df_excel_ls_signals
+            self.TR_df_daily_06              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_crv_equal_vol, self.holdings_df_crv_equal_vol, self.weights_df_crv_equal_vol, self.long_short_signals_df_crv_equal_vol] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_curvature, target_vol=self.curvy_trade_target_vol, strategy_n=strategy_n)
-            self.TR_df_crv_equal_vol_daily = self.run_daily_pnl(self.holdings_df_crv_equal_vol, strategy_n)
+            [self.TR_df_06, self.holdings_df_06, self.weights_df_06, self.long_short_signals_df_06] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_curvature, target_vol=self.curvy_trade_target_vol, strategy_n=strategy_n)
+            self.TR_df_daily_06 = self.run_daily_pnl(self.holdings_df_06, strategy_n)
         print('Equal vol Curvy trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy07(self):
@@ -446,15 +474,15 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df_lvl_equal_vol                    = df_excel_tr
-            self.holdings_df_lvl_equal_vol              = df_excel_holdings
-            self.weights_df_lvl_equal_vol               = df_excel_weights
-            self.long_short_signals_df_lvl_equal_vol    = df_excel_ls_signals
-            self.TR_df_lvl_equal_vol_daily              = dt_excel_daily_pnl
+            self.TR_df_07                    = df_excel_tr
+            self.holdings_df_07              = df_excel_holdings
+            self.weights_df_07               = df_excel_weights
+            self.long_short_signals_df_07    = df_excel_ls_signals
+            self.TR_df_daily_07              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_lvl_equal_vol, self.holdings_df_lvl_equal_vol, self.weights_df_lvl_equal_vol, self.long_short_signals_df_lvl_equal_vol] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_level, target_vol=self.level_trade_target_vol, strategy_n=strategy_n)
-            self.TR_df_lvl_equal_vol_daily = self.run_daily_pnl(self.holdings_df_lvl_equal_vol, strategy_n)
+            [self.TR_df_07, self.holdings_df_07, self.weights_df_07, self.long_short_signals_df_07] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_level, target_vol=self.level_trade_target_vol, strategy_n=strategy_n)
+            self.TR_df_daily_07 = self.run_daily_pnl(self.holdings_df_07, strategy_n)
         print('Equal vol Level trade OK - ', time.time() - time_start, ' seconds')
 
     def run_strategy08(self):
@@ -470,20 +498,20 @@ class CurvyTrade:
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df_slp_equal_vol                    = df_excel_tr
-            self.holdings_df_slp_equal_vol              = df_excel_holdings
-            self.weights_df_slp_equal_vol               = df_excel_weights
-            self.long_short_signals_df_slp_equal_vol    = df_excel_ls_signals
-            self.TR_df_slp_equal_vol_daily              = dt_excel_daily_pnl
+            self.TR_df_08                    = df_excel_tr
+            self.holdings_df_08              = df_excel_holdings
+            self.weights_df_08               = df_excel_weights
+            self.long_short_signals_df_08    = df_excel_ls_signals
+            self.TR_df_daily_08              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_slp_equal_vol, self.holdings_df_slp_equal_vol, self.weights_df_slp_equal_vol, self.long_short_signals_df_slp_equal_vol] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_slope, target_vol=self.slope_trade_target_vol, strategy_n=strategy_n)
-            self.TR_df_slp_equal_vol_daily = self.run_daily_pnl(self.holdings_df_slp_equal_vol, strategy_n)
+            [self.TR_df_08, self.holdings_df_08, self.weights_df_08, self.long_short_signals_df_08] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_slope, target_vol=self.slope_trade_target_vol, strategy_n=strategy_n)
+            self.TR_df_daily_08 = self.run_daily_pnl(self.holdings_df_08, strategy_n)
         print('Equal vol Slope trade OK - ', time.time() - time_start, ' seconds')
 
     def run_constructor_in_parts6(self):
         print('Starting strategies')
-        [getattr(self, 'run_strategy' + "{:02}".format(strategy_n))() for strategy_n in range(1, 9)]
+        [getattr(self, 'run_strategy' + "{:02}".format(strategy_n))() for strategy_n in range(1, self.total_strategy_number + 1)]
 
 
     def _build_k_list(self):
@@ -549,7 +577,7 @@ class CurvyTrade:
         return spot_last_extended_calendar
 
     def _get_fwdpts_data(self, bbg_field=['PX_LAST']):
-        fwd_pts_last = self.con.bdh(self.ticker_fwdpts_1m, bbg_field, self.ini_date_bbg, self.end_date_bbg, elms=[("periodicitySelection", self.bbg_periodicity_spot)])
+        fwd_pts_last = self.con.bdh(self.ticker_fwdpts_1m, bbg_field, self.ini_date_prices_bbg, self.end_date_bbg, elms=[("periodicitySelection", self.bbg_periodicity_spot)])
         fwd_pts_last.columns = fwd_pts_last.columns.droplevel(1)
         fwd_pts_last.fillna(method='ffill', inplace=True)
         fwd_pts_last.columns = [self.dict_NDF_FX[x.replace('1M BGN Curncy', '').replace('1M CMPN Curncy', '')] for x in fwd_pts_last.columns]
@@ -581,8 +609,49 @@ class CurvyTrade:
         unit_wgt = 1.0 / k
         down_limit = k
         for d in df_ranking.index:
-            up_limit = df_ranking.loc[d].max() - k
-            df_signals.loc[d] = (df_ranking.loc[d] > up_limit).multiply(1) - (df_ranking.loc[d] <= down_limit).multiply(1)
+            n = df_ranking.loc[d].max()
+            if n >= k * 2:
+                up_limit = df_ranking.loc[d].max() - k
+                df_signals.loc[d] = (df_ranking.loc[d] > up_limit).multiply(1) - (df_ranking.loc[d] <= down_limit).multiply(1)
+                weights.loc[d] = df_signals.loc[d] * unit_wgt
+            else:
+                # Do not trade if there is not enough assets to trade long/short
+                df_signals.loc[d] = 0
+                weights.loc[d]
+
+        return weights, df_signals
+
+    @staticmethod
+    def _ranking_to_wgt_double_sorting(df_ranking, df_ranking_2, groups=3, subgroups=2):
+        df_signals = pd.DataFrame(data=None, index=df_ranking.index, columns=df_ranking.columns)
+        weights = pd.DataFrame(data=None, index=df_ranking.index, columns=df_ranking.columns)
+
+        for d in df_ranking.index:
+            # Filters for buying FX
+            # First filter: divide first criteria in 3 groups (high, medium, low)
+            up_limit = df_ranking.loc[d].max() * (1 - 1 / groups) # Ranking is ascending, so up limit needs to filter from 2/3 to 3/3.
+            filter1 = (df_ranking.loc[d] > up_limit) # Series of true or false
+            # Second filter: divide high and low blocks in two subgroups: high and low (eg. high-high, high-low)
+            rank_2 = df_ranking_2.loc[d, filter1].rank(ascending=True)
+            up_limit_2 = rank_2.max() / subgroups
+            filter2 = (rank_2 > up_limit_2)
+            filter2 = filter2.loc[filter2].index
+            n_assets = len(filter2)
+            df_signals.loc[d] = 0
+            df_signals.loc[d, filter2] = 1
+            # Filters for selling FX
+            # First filter: divide first criteria in 3 groups (high, medium, low)
+            down_limit = df_ranking.loc[d].max() * (1 / groups)
+            filter1 = (df_ranking.loc[d] <= down_limit)  # Series of true or false
+            # Second filter: divide high and low blocks in two subgroups: high and low (eg. high-high, high-low)
+            rank_2 = df_ranking_2.loc[d, filter1].rank(ascending=True)
+            # down_limit_2 = rank_2.max() / subgroups
+            # filter2 = (rank_2 <= down_limit_2)
+            filter2 = (rank_2 <= n_assets)
+            filter2 = filter2.loc[filter2].index
+            df_signals.loc[d, filter2] = -1
+            # Weight calculation follows normal strategy approach (same weight for each FX)
+            unit_wgt = 1.0 / n_assets
             weights.loc[d] = df_signals.loc[d] * unit_wgt
         return weights, df_signals
 
@@ -664,11 +733,37 @@ class CurvyTrade:
             signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
         return TR_index, holdings, weights_used, signals_used
 
+    def _run_default_monthly_strategy_double_sorting(self, df_forwards, df_spots, df_ranking1, df_ranking2, func_weight, groups, subgroups):
+        # df_forwards should be in XXXUSD
+        # d=day, tm1=t minus 1
+        TR_index = pd.DataFrame(index=self.monthly_calendar, columns=['TR_index'])
+        holdings = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        # weights and signals are calculated daily, but this functions should only return the ones used in strategy.
+        weights_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        signals_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        d_ini = self.monthly_calendar[0]
+        TR_index.loc[d_ini] = 100.0
+        [weights, signals] = func_weight(df_ranking1, df_ranking2, groups, subgroups)  # Daily data
+        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
+        weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
+        signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
+        # tm1: t minus 1
+        for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
+            pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            TR_index.loc[d] = TR_index.loc[tm1] + pnl
+            dm1 = d - BDay(1)
+            # Adding 1 day delay to weights and signals used for trading
+            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
+            weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
+            signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
+        return TR_index, holdings, weights_used, signals_used
+
     def run_default_monthly_strategy(self, df_signals, func_weight, strategy_n=0):
         """
         Run strategy for k=1 to k=4 and returns a DataFrame with 4 series
         """
-        df_ranking = self._simple_ranking(df_signals)
+        df_signals_smooth = df_signals.rolling(self.signal_moving_avg).mean()
+        df_ranking = self._simple_ranking(df_signals_smooth)
         # TR_df
         TR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
         # holdings_df, weights_df, long_short_signals_df
@@ -680,6 +775,41 @@ class CurvyTrade:
 
         for k in self.k_range:
             [TR_index_k, holdings_k, weights_k, signals_k] = self._run_default_monthly_strategy(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking, func_weight, k=k)
+            TR_df['k' + str(k)] = TR_index_k
+            holdings_df.loc['k' + str(k)] = holdings_k.values
+            weights_df.loc['k' + str(k)] = weights_k.values
+            long_short_signals_df.loc['k' + str(k)] = signals_k.values
+
+        #Write results in 'data' folder as Excel file. File will be name according with strategy number
+        name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        TR_df.to_excel(name_start + 'TR.xlsx')
+        holdings_df.to_excel(name_start + 'Holdings.xlsx')
+        weights_df.to_excel(name_start + 'Weights.xlsx')
+        long_short_signals_df.to_excel(name_start + 'LS_Signals.xlsx')
+
+        return TR_df, holdings_df, weights_df, long_short_signals_df
+
+    def run_default_monthly_strategy_double_sorting(self, df_signals1, df_signals2, func_weight, strategy_n=0, groups=3, subgroups=2):
+        """
+        Run strategy for k=1 to k=4 and returns a DataFrame with 4 series
+        """
+        df_signals1_smooth = df_signals1.rolling(self.signal_moving_avg).mean()
+        df_signals2_smooth = df_signals2.rolling(self.signal_moving_avg).mean()
+
+        df_ranking1 = self._simple_ranking(df_signals1_smooth)
+        df_ranking2 = self._simple_ranking(df_signals2_smooth)
+
+        # TR_df
+        TR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        # holdings_df, weights_df, long_short_signals_df
+        iterables_k = [self.k_list, self.monthly_calendar]
+        idx = pd.MultiIndex.from_product(iterables=iterables_k)
+        holdings_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        weights_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        long_short_signals_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+
+        [TR_index_k, holdings_k, weights_k, signals_k] = self._run_default_monthly_strategy_double_sorting(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking1, df_ranking2, func_weight, groups, subgroups)
+        for k in self.k_range:
             TR_df['k' + str(k)] = TR_index_k
             holdings_df.loc['k' + str(k)] = holdings_k.values
             weights_df.loc['k' + str(k)] = weights_k.values
@@ -749,7 +879,8 @@ class CurvyTrade:
         A 9% volatility should make an equal vol strategy with similar volatility of a normal carry trade strategy.
 
         """
-        df_ranking = self._simple_ranking(df_signals)
+        df_signals_smooth = df_signals.rolling(self.signal_moving_avg).mean()
+        df_ranking = self._simple_ranking(df_signals_smooth)
 
         # TR_df
         TR_df_equal_vol = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
@@ -1088,11 +1219,11 @@ class CurvyTrade:
 
         for i in self.k_range:
             # table04 Funding Currencies
-            table04_Funding.loc[('Forward discount', i)] = (self.long_short_signals_df.loc['k' + str(i)] < -0.01).sum()
-            table04_Funding.loc[('Curvature', i)] = (self.long_short_signals_crv_df.loc['k' + str(i)] < -0.01).sum()
+            table04_Funding.loc[('Forward discount', i)] = (self.long_short_signals_df_01.loc['k' + str(i)] < -0.01).sum()
+            table04_Funding.loc[('Curvature', i)] = (self.long_short_signals_df_02.loc['k' + str(i)] < -0.01).sum()
             # table05 Investing Currencies
-            table05_Investing.loc[('Forward discount', i)] = (self.long_short_signals_df.loc['k' + str(i)] > 0.01).sum()
-            table05_Investing.loc[('Curvature', i)] = (self.long_short_signals_crv_df.loc['k' + str(i)] > 0.01).sum()
+            table05_Investing.loc[('Forward discount', i)] = (self.long_short_signals_df_01.loc['k' + str(i)] > 0.01).sum()
+            table05_Investing.loc[('Curvature', i)] = (self.long_short_signals_df_02.loc['k' + str(i)] > 0.01).sum()
 
         self.table04_Funding = table04_Funding
         self.table05_Investing = table05_Investing
@@ -1108,6 +1239,12 @@ class CurvyTrade:
         Table = pd.Series(index=['Excess Return', 'Volatility', 'Sharpe', 'Sortino', 'Max Drawdown',
                                  'Max Drawdown in Vol Terms', '5th percentile in Vol Terms',
                                  '10th percentile in Vol Terms'])
+
+        CleanIndexSeries = IndexSeries.copy(deep=True)
+        for d, d_minus_1 in zip(CleanIndexSeries.index[1:], CleanIndexSeries.index[:-1]):
+            if (CleanIndexSeries.loc[d] / CleanIndexSeries.loc[d_minus_1] -1) != 0:
+                CleanIndexSeries = CleanIndexSeries.loc[d_minus_1:]
+                break
 
         CleanIndexSeries = IndexSeries.dropna().sort_index()
 
@@ -1139,205 +1276,132 @@ class CurvyTrade:
         dd2here = ser / max2here - 1.0
         return dd2here.min()
 
-    def table_three(self):
+    def build_performance_df_monthly(self):
+        freq='Monthly'
+        column_names = ['Excess Return', 'Volatility', 'Sharpe', 'Sortino', 'Skewness', 'Kurtosis', 'Max Drawdown',
+                      'Max Drawdown in Vol Terms', '5th percentile in Vol Terms', '10th percentile in Vol Terms']
+        list_of_strategy_names = list(self.df_strategy['Name'])
         idx = pd.MultiIndex.from_product(
-            iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
-                       self.k_range],
-            names=['Sorting', 'k'])
+            iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+
+            # iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature',
+            #             'Curvature (EV)', 'Carry-Curvy DS'],
+            #            self.k_range],
+            # names=['Sorting', 'k'])
+
+        performance_df_monthly = pd.DataFrame(data=None, index=idx, columns=column_names)
+
+        for i in range(1, self.total_strategy_number + 1):
+            for k in self.k_range:
+                TR_string = self.df_strategy.loc[i, 'TR']
+                performance_df_monthly.loc[(list_of_strategy_names[i], k)] = self.GetPerformanceTable(getattr(self, TR_string)['k' + str(k)], freq=freq)
+
+        return performance_df_monthly
+
+    def build_performance_df(self, freq='Daily'):
+        column_names = ['Excess Return', 'Volatility', 'Sharpe', 'Sortino', 'Skewness', 'Kurtosis', 'Max Drawdown',
+                      'Max Drawdown in Vol Terms', '5th percentile in Vol Terms', '10th percentile in Vol Terms']
+        list_of_strategy_names = list(self.df_strategy['Name'])
+        idx = pd.MultiIndex.from_product(
+            iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+
+            # iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature',
+            #             'Curvature (EV)', 'Carry-Curvy DS'],
+            #            self.k_range],
+            # names=['Sorting', 'k'])
+
+        performance_df = pd.DataFrame(data=None, index=idx, columns=column_names)
+
+        for i in range(1, self.total_strategy_number + 1):
+            for k in self.k_range:
+                TR_string = self.df_strategy.loc[i, 'TR']
+                performance_df.loc[(list_of_strategy_names[i], k)] = self.GetPerformanceTable(getattr(self, TR_string)['k' + str(k)], freq=freq)
+
+        return performance_df
+
+    def table_three(self):
+        freq = 'Monthly'
+        list_of_strategy_names = list(self.df_strategy['Name'])
+        idx = pd.MultiIndex.from_product(iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+        # idx = pd.MultiIndex.from_product(
+        #     iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
+        #                self.k_range],
+        #     names=['Sorting', 'k'])
         column_names = ['Mean annual', 'Stdev annual', 'Skewness monthly', 'Kurtosis monthly', 'Sharpe ratio']
+        dict_columns = {'Mean annual': 'Excess Return',
+                        'Stdev annual': 'Volatility',
+                        'Skewness monthly': 'Skewness',
+                        'Kurtosis monthly': 'Kurtosis',
+                        'Sharpe ratio': 'Sharpe'}
+        dict_mult = {'Excess Return': 100.0,
+                     'Volatility': 100.0,
+                     'Skewness': 1.0,
+                     'Kurtosis': 1.0,
+                     'Sharpe': 1.0}
         table03 = pd.DataFrame(index=idx, columns=column_names)
-
-        mean_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df['k' + str(k)],            freq='Monthly')['Excess Return'] * 100
-        mean_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol['k' + str(k)], freq='Monthly')['Excess Return'] * 100
-        mean_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df['k' + str(k)],                  freq='Monthly')['Excess Return'] * 100
-        mean_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol['k' + str(k)],     freq='Monthly')['Excess Return'] * 100
-        mean_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df['k' + str(k)],            freq='Monthly')['Excess Return'] * 100
-        mean_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol['k' + str(k)], freq='Monthly')['Excess Return'] * 100
-        mean_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df['k' + str(k)],            freq='Monthly')['Excess Return'] * 100
-        mean_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol['k' + str(k)], freq='Monthly')['Excess Return'] * 100
-
-        vol_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df['k' + str(k)],             freq='Monthly')['Volatility'] * 100
-        vol_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol['k' + str(k)],  freq='Monthly')['Volatility'] * 100
-        vol_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df['k' + str(k)],                   freq='Monthly')['Volatility'] * 100
-        vol_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol['k' + str(k)],      freq='Monthly')['Volatility'] * 100
-        vol_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df['k' + str(k)],             freq='Monthly')['Volatility'] * 100
-        vol_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol['k' + str(k)], freq='Monthly')['Volatility'] * 100
-        vol_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df['k' + str(k)],             freq='Monthly')['Volatility'] * 100
-        vol_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol['k' + str(k)], freq='Monthly')['Volatility'] * 100
-
-        sharpe_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df['k' + str(k)],              freq='Monthly')['Sharpe']
-        sharpe_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol['k' + str(k)],   freq='Monthly')['Sharpe']
-        sharpe_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df['k' + str(k)],                    freq='Monthly')['Sharpe']
-        sharpe_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol['k' + str(k)],       freq='Monthly')['Sharpe']
-        sharpe_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df['k' + str(k)],              freq='Monthly')['Sharpe']
-        sharpe_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol['k' + str(k)],    freq='Monthly')['Sharpe']
-        sharpe_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df['k' + str(k)],              freq='Monthly')['Sharpe']
-        sharpe_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol['k' + str(k)],    freq='Monthly')['Sharpe']
-
-        skew_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df['k' + str(k)],            freq='Monthly')['Skewness']
-        skew_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol['k' + str(k)], freq='Monthly')['Skewness']
-        skew_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df['k' + str(k)],                  freq='Monthly')['Skewness']
-        skew_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol['k' + str(k)],     freq='Monthly')['Skewness']
-        skew_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df['k' + str(k)],            freq='Monthly')['Skewness']
-        skew_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol['k' + str(k)], freq='Monthly')['Skewness']
-        skew_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df['k' + str(k)],            freq='Monthly')['Skewness']
-        skew_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol['k' + str(k)], freq='Monthly')['Skewness']
-
-        kurt_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df['k' + str(k)],            freq='Monthly')['Kurtosis']
-        kurt_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol['k' + str(k)], freq='Monthly')['Kurtosis']
-        kurt_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df['k' + str(k)],                  freq='Monthly')['Kurtosis']
-        kurt_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol['k' + str(k)],     freq='Monthly')['Kurtosis']
-        kurt_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df['k' + str(k)],            freq='Monthly')['Kurtosis']
-        kurt_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol['k' + str(k)], freq='Monthly')['Kurtosis']
-        kurt_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df['k' + str(k)],            freq='Monthly')['Kurtosis']
-        kurt_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol['k' + str(k)], freq='Monthly')['Kurtosis']
-
-        table03.loc[('Curvature',),         'Mean annual']  = [mean_annual_curvy(k) for k in self.k_range]
-        table03.loc[('Curvature (EV)',),    'Mean annual']  = [mean_annual_crv_ev(k) for k in self.k_range]
-        table03.loc[('Carry trade',),       'Mean annual']  = [mean_annual_dsc(k) for k in self.k_range]
-        table03.loc[('Carry (EV)',),        'Mean annual']  = [mean_annual_dsc_ev(k) for k in self.k_range]
-        table03.loc[('Level',),             'Mean annual']  = [mean_annual_level(k) for k in self.k_range]
-        table03.loc[('Level (EV)',),        'Mean annual']  = [mean_annual_level_ev(k) for k in self.k_range]
-        table03.loc[('Slope',),             'Mean annual']  = [mean_annual_slope(k) for k in self.k_range]
-        table03.loc[('Slope (EV)',),        'Mean annual']  = [mean_annual_slope_ev(k) for k in self.k_range]
-
-        table03.loc[('Curvature',),         'Stdev annual'] = [vol_annual_curvy(k) for k in self.k_range]
-        table03.loc[('Curvature (EV)',),    'Stdev annual'] = [vol_annual_crv_ev(k) for k in self.k_range]
-        table03.loc[('Carry trade',),       'Stdev annual'] = [vol_annual_dsc(k) for k in self.k_range]
-        table03.loc[('Carry (EV)',),        'Stdev annual'] = [vol_annual_dsc_ev(k) for k in self.k_range]
-        table03.loc[('Level',),             'Stdev annual'] = [vol_annual_level(k) for k in self.k_range]
-        table03.loc[('Level (EV)',),        'Stdev annual'] = [vol_annual_level_ev(k) for k in self.k_range]
-        table03.loc[('Slope',),             'Stdev annual'] = [vol_annual_slope(k) for k in self.k_range]
-        table03.loc[('Slope (EV)',),        'Stdev annual'] = [vol_annual_slope_ev(k) for k in self.k_range]
-
-        table03.loc[('Curvature',),         'Sharpe ratio'] = [sharpe_annual_curvy(k) for k in self.k_range]
-        table03.loc[('Curvature (EV)',),    'Sharpe ratio'] = [sharpe_annual_crv_ev(k) for k in self.k_range]
-        table03.loc[('Carry trade',),       'Sharpe ratio'] = [sharpe_annual_dsc(k) for k in self.k_range]
-        table03.loc[('Carry (EV)',),        'Sharpe ratio'] = [sharpe_annual_dsc_ev(k) for k in self.k_range]
-        table03.loc[('Level',),             'Sharpe ratio'] = [sharpe_annual_level(k) for k in self.k_range]
-        table03.loc[('Level (EV)',),        'Sharpe ratio'] = [sharpe_annual_level_ev(k) for k in self.k_range]
-        table03.loc[('Slope',),             'Sharpe ratio'] = [sharpe_annual_slope(k) for k in self.k_range]
-        table03.loc[('Slope (EV)',),        'Sharpe ratio'] = [sharpe_annual_slope_ev(k) for k in self.k_range]
-
-        table03.loc[('Curvature',),         'Skewness monthly'] = [skew_annual_curvy(k) for k in self.k_range]
-        table03.loc[('Curvature (EV)',),    'Skewness monthly'] = [skew_annual_crv_ev(k) for k in self.k_range]
-        table03.loc[('Carry trade',),       'Skewness monthly'] = [skew_annual_dsc(k) for k in self.k_range]
-        table03.loc[('Carry (EV)',),        'Skewness monthly'] = [skew_annual_dsc_ev(k) for k in self.k_range]
-        table03.loc[('Level',),             'Skewness monthly'] = [skew_annual_level(k) for k in self.k_range]
-        table03.loc[('Level (EV)',),        'Skewness monthly'] = [skew_annual_level_ev(k) for k in self.k_range]
-        table03.loc[('Slope',),             'Skewness monthly'] = [skew_annual_slope(k) for k in self.k_range]
-        table03.loc[('Slope (EV)',),        'Skewness monthly'] = [skew_annual_slope_ev(k) for k in self.k_range]
-
-        table03.loc[('Curvature',),         'Kurtosis monthly'] = [kurt_annual_curvy(k) for k in self.k_range]
-        table03.loc[('Curvature (EV)',),    'Kurtosis monthly'] = [kurt_annual_crv_ev(k) for k in self.k_range]
-        table03.loc[('Carry trade',),       'Kurtosis monthly'] = [kurt_annual_dsc(k) for k in self.k_range]
-        table03.loc[('Carry (EV)',),        'Kurtosis monthly'] = [kurt_annual_dsc_ev(k) for k in self.k_range]
-        table03.loc[('Level',),             'Kurtosis monthly'] = [kurt_annual_level(k) for k in self.k_range]
-        table03.loc[('Level (EV)',),        'Kurtosis monthly'] = [kurt_annual_level_ev(k) for k in self.k_range]
-        table03.loc[('Slope',),             'Kurtosis monthly'] = [kurt_annual_slope(k) for k in self.k_range]
-        table03.loc[('Slope (EV)',),        'Kurtosis monthly'] = [kurt_annual_slope_ev(k) for k in self.k_range]
-
+        performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR'])['k' + str(k)], freq=freq)[field] * dict_mult[field]
+        for strategy_name in list_of_strategy_names:
+            for column_name in column_names:
+                field = dict_columns[column_name]
+                n = self.df_strategy[self.df_strategy['Name'] == strategy_name].index[0]
+                table03.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
         return table03
 
-
     def table_three_daily(self):
-        idx = pd.MultiIndex.from_product(
-        iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
-               self.k_range],
-        names=['Sorting', 'k'])
+        freq = 'Daily'
+        list_of_strategy_names = list(self.df_strategy['Name'])
+        idx = pd.MultiIndex.from_product(iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+        # idx = pd.MultiIndex.from_product(
+        # iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
+        #                self.k_range],
+        # names=['Sorting', 'k'])
         column_names = ['Mean annual', 'Stdev annual', 'Skewness monthly', 'Kurtosis monthly', 'Sharpe ratio']
+        dict_columns = {'Mean annual': 'Excess Return',
+                        'Stdev annual': 'Volatility',
+                        'Skewness monthly': 'Skewness',
+                        'Kurtosis monthly': 'Kurtosis',
+                        'Sharpe ratio': 'Sharpe'}
+        dict_mult = {'Excess Return': 100.0,
+                     'Volatility': 100.0,
+                     'Skewness': 1.0,
+                     'Kurtosis': 1.0,
+                     'Sharpe': 1.0}
         table03_daily = pd.DataFrame(index=idx, columns=column_names)
+        performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR_df_daily'])['k' + str(k)], freq=freq)[field] * dict_mult[field]
+        for strategy_name in list_of_strategy_names:
+            for column_name in column_names:
+                field = dict_columns[column_name]
+                n = self.df_strategy[self.df_strategy['Name'] == strategy_name].index[0]
+                table03_daily.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
+        return table03_daily
 
-        mean_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df_daily['k' + str(k)],            freq='Daily')['Excess Return'] * 100
-        mean_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol_daily['k' + str(k)], freq='Daily')['Excess Return'] * 100
-        mean_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df_daily['k' + str(k)],                  freq='Daily')['Excess Return'] * 100
-        mean_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol_daily['k' + str(k)],     freq='Daily')['Excess Return'] * 100
-        mean_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df_daily['k' + str(k)],            freq='Daily')['Excess Return'] * 100
-        mean_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol_daily['k' + str(k)], freq='Daily')['Excess Return'] * 100
-        mean_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df_daily['k' + str(k)],            freq='Daily')['Excess Return'] * 100
-        mean_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol_daily['k' + str(k)], freq='Daily')['Excess Return'] * 100
 
-        vol_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df_daily['k' + str(k)],             freq='Daily')['Volatility'] * 100
-        vol_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol_daily['k' + str(k)],  freq='Daily')['Volatility'] * 100
-        vol_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df_daily['k' + str(k)],                   freq='Daily')['Volatility'] * 100
-        vol_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol_daily['k' + str(k)],      freq='Daily')['Volatility'] * 100
-        vol_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df_daily['k' + str(k)],             freq='Daily')['Volatility'] * 100
-        vol_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol_daily['k' + str(k)], freq='Daily')['Volatility'] * 100
-        vol_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df_daily['k' + str(k)],             freq='Daily')['Volatility'] * 100
-        vol_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol_daily['k' + str(k)], freq='Daily')['Volatility'] * 100
-
-        sharpe_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df_daily['k' + str(k)],              freq='Daily')['Sharpe']
-        sharpe_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol_daily['k' + str(k)],   freq='Daily')['Sharpe']
-        sharpe_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df_daily['k' + str(k)],                    freq='Daily')['Sharpe']
-        sharpe_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol_daily['k' + str(k)],       freq='Daily')['Sharpe']
-        sharpe_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df_daily['k' + str(k)],              freq='Daily')['Sharpe']
-        sharpe_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol_daily['k' + str(k)],    freq='Daily')['Sharpe']
-        sharpe_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df_daily['k' + str(k)],              freq='Daily')['Sharpe']
-        sharpe_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol_daily['k' + str(k)],    freq='Daily')['Sharpe']
-
-        skew_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df_daily['k' + str(k)],            freq='Daily')['Skewness']
-        skew_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol_daily['k' + str(k)], freq='Daily')['Skewness']
-        skew_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df_daily['k' + str(k)],                  freq='Daily')['Skewness']
-        skew_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol_daily['k' + str(k)],     freq='Daily')['Skewness']
-        skew_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df_daily['k' + str(k)],            freq='Daily')['Skewness']
-        skew_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol_daily['k' + str(k)], freq='Daily')['Skewness']
-        skew_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df_daily['k' + str(k)],            freq='Daily')['Skewness']
-        skew_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol_daily['k' + str(k)], freq='Daily')['Skewness']
-
-        kurt_annual_curvy = lambda k: self.GetPerformanceTable(self.TR_crv_df_daily['k' + str(k)],            freq='Daily')['Kurtosis']
-        kurt_annual_crv_ev = lambda k: self.GetPerformanceTable(self.TR_df_crv_equal_vol_daily['k' + str(k)], freq='Daily')['Kurtosis']
-        kurt_annual_dsc = lambda k: self.GetPerformanceTable(self.TR_df_daily['k' + str(k)],                  freq='Daily')['Kurtosis']
-        kurt_annual_dsc_ev = lambda k: self.GetPerformanceTable(self.TR_df_equal_vol_daily['k' + str(k)],     freq='Daily')['Kurtosis']
-        kurt_annual_level = lambda k: self.GetPerformanceTable(self.TR_lvl_df_daily['k' + str(k)],            freq='Daily')['Kurtosis']
-        kurt_annual_level_ev = lambda k: self.GetPerformanceTable(self.TR_df_lvl_equal_vol_daily['k' + str(k)], freq='Daily')['Kurtosis']
-        kurt_annual_slope = lambda k: self.GetPerformanceTable(self.TR_slp_df_daily['k' + str(k)],            freq='Daily')['Kurtosis']
-        kurt_annual_slope_ev = lambda k: self.GetPerformanceTable(self.TR_df_slp_equal_vol_daily['k' + str(k)], freq='Daily')['Kurtosis']
-
-        table03_daily.loc[('Curvature',),         'Mean annual']  = [mean_annual_curvy(k) for k in self.k_range]
-        table03_daily.loc[('Curvature (EV)',),    'Mean annual']  = [mean_annual_crv_ev(k) for k in self.k_range]
-        table03_daily.loc[('Carry trade',),       'Mean annual']  = [mean_annual_dsc(k) for k in self.k_range]
-        table03_daily.loc[('Carry (EV)',),        'Mean annual']  = [mean_annual_dsc_ev(k) for k in self.k_range]
-        table03_daily.loc[('Level',),             'Mean annual']  = [mean_annual_level(k) for k in self.k_range]
-        table03_daily.loc[('Level (EV)',),        'Mean annual']  = [mean_annual_level_ev(k) for k in self.k_range]
-        table03_daily.loc[('Slope',),             'Mean annual']  = [mean_annual_slope(k) for k in self.k_range]
-        table03_daily.loc[('Slope (EV)',),        'Mean annual']  = [mean_annual_slope_ev(k) for k in self.k_range]
-
-        table03_daily.loc[('Curvature',),         'Stdev annual'] = [vol_annual_curvy(k) for k in self.k_range]
-        table03_daily.loc[('Curvature (EV)',),    'Stdev annual'] = [vol_annual_crv_ev(k) for k in self.k_range]
-        table03_daily.loc[('Carry trade',),       'Stdev annual'] = [vol_annual_dsc(k) for k in self.k_range]
-        table03_daily.loc[('Carry (EV)',),        'Stdev annual'] = [vol_annual_dsc_ev(k) for k in self.k_range]
-        table03_daily.loc[('Level',),             'Stdev annual'] = [vol_annual_level(k) for k in self.k_range]
-        table03_daily.loc[('Level (EV)',),        'Stdev annual'] = [vol_annual_level_ev(k) for k in self.k_range]
-        table03_daily.loc[('Slope',),             'Stdev annual'] = [vol_annual_slope(k) for k in self.k_range]
-        table03_daily.loc[('Slope (EV)',),        'Stdev annual'] = [vol_annual_slope_ev(k) for k in self.k_range]
-
-        table03_daily.loc[('Curvature',),         'Sharpe ratio'] = [sharpe_annual_curvy(k) for k in self.k_range]
-        table03_daily.loc[('Curvature (EV)',),    'Sharpe ratio'] = [sharpe_annual_crv_ev(k) for k in self.k_range]
-        table03_daily.loc[('Carry trade',),       'Sharpe ratio'] = [sharpe_annual_dsc(k) for k in self.k_range]
-        table03_daily.loc[('Carry (EV)',),        'Sharpe ratio'] = [sharpe_annual_dsc_ev(k) for k in self.k_range]
-        table03_daily.loc[('Level',),             'Sharpe ratio'] = [sharpe_annual_level(k) for k in self.k_range]
-        table03_daily.loc[('Level (EV)',),        'Sharpe ratio'] = [sharpe_annual_level_ev(k) for k in self.k_range]
-        table03_daily.loc[('Slope',),             'Sharpe ratio'] = [sharpe_annual_slope(k) for k in self.k_range]
-        table03_daily.loc[('Slope (EV)',),        'Sharpe ratio'] = [sharpe_annual_slope_ev(k) for k in self.k_range]
-
-        table03_daily.loc[('Curvature',),         'Skewness monthly'] = [skew_annual_curvy(k) for k in self.k_range]
-        table03_daily.loc[('Curvature (EV)',),    'Skewness monthly'] = [skew_annual_crv_ev(k) for k in self.k_range]
-        table03_daily.loc[('Carry trade',),       'Skewness monthly'] = [skew_annual_dsc(k) for k in self.k_range]
-        table03_daily.loc[('Carry (EV)',),        'Skewness monthly'] = [skew_annual_dsc_ev(k) for k in self.k_range]
-        table03_daily.loc[('Level',),             'Skewness monthly'] = [skew_annual_level(k) for k in self.k_range]
-        table03_daily.loc[('Level (EV)',),        'Skewness monthly'] = [skew_annual_level_ev(k) for k in self.k_range]
-        table03_daily.loc[('Slope',),             'Skewness monthly'] = [skew_annual_slope(k) for k in self.k_range]
-        table03_daily.loc[('Slope (EV)',),        'Skewness monthly'] = [skew_annual_slope_ev(k) for k in self.k_range]
-
-        table03_daily.loc[('Curvature',),         'Kurtosis monthly'] = [kurt_annual_curvy(k) for k in self.k_range]
-        table03_daily.loc[('Curvature (EV)',),    'Kurtosis monthly'] = [kurt_annual_crv_ev(k) for k in self.k_range]
-        table03_daily.loc[('Carry trade',),       'Kurtosis monthly'] = [kurt_annual_dsc(k) for k in self.k_range]
-        table03_daily.loc[('Carry (EV)',),        'Kurtosis monthly'] = [kurt_annual_dsc_ev(k) for k in self.k_range]
-        table03_daily.loc[('Level',),             'Kurtosis monthly'] = [kurt_annual_level(k) for k in self.k_range]
-        table03_daily.loc[('Level (EV)',),        'Kurtosis monthly'] = [kurt_annual_level_ev(k) for k in self.k_range]
-        table03_daily.loc[('Slope',),             'Kurtosis monthly'] = [kurt_annual_slope(k) for k in self.k_range]
-        table03_daily.loc[('Slope (EV)',),        'Kurtosis monthly'] = [kurt_annual_slope_ev(k) for k in self.k_range]
-
+    def table_three_daily_period(self, start='1991', end='2019'):
+        freq = 'Daily'
+        list_of_strategy_names = list(self.df_strategy['Name'])
+        idx = pd.MultiIndex.from_product(iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+        # idx = pd.MultiIndex.from_product(
+        # iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
+        #        self.k_range],
+        # names=['Sorting', 'k'])
+        column_names = ['Mean annual', 'Stdev annual', 'Skewness monthly', 'Kurtosis monthly', 'Sharpe ratio']
+        dict_columns = {'Mean annual': 'Excess Return',
+                        'Stdev annual': 'Volatility',
+                        'Skewness monthly': 'Skewness',
+                        'Kurtosis monthly': 'Kurtosis',
+                        'Sharpe ratio': 'Sharpe'}
+        dict_mult = {'Excess Return': 100.0,
+                        'Volatility': 100.0,
+                        'Skewness': 1.0,
+                        'Kurtosis': 1.0,
+                        'Sharpe': 1.0}
+        table03_daily = pd.DataFrame(index=idx, columns=column_names)
+        performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR_df_daily']).loc[start:end, 'k' + str(k)], freq=freq)[field] * dict_mult[field]
+        for strategy_name in list_of_strategy_names:
+            for column_name in column_names:
+                field = dict_columns[column_name]
+                n = self.df_strategy[self.df_strategy['Name'] == strategy_name].index[0]
+                table03_daily.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
         return table03_daily
 
     def _get_fwdpts_curve_bbg(self, ticker_list_curve=None, ini_date_bbg=None, end_date_bbg=None):
@@ -1524,4 +1588,52 @@ class CurvyTrade:
         for d in beta_USD_df.index:
             beta_USD_df.loc[d] = covariance_USD.loc[d] / covariance_USD['USD'].loc[d]
         return beta_USD_df
+
+    def run_strategy09(self):
+        time_start = time.time()
+        # Double sorting: first carry, second curvature
+        strategy_n = 9
+        strategy_name = 'Carry-Curvy DS'
+        name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        try:
+            # Try to read results from Excel files, otherwise run and write to Excel
+            df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
+            df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
+            df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
+            df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
+            self.TR_df_09                    = df_excel_tr
+            self.holdings_df_09              = df_excel_holdings
+            self.weights_df_09               = df_excel_weights
+            self.long_short_signals_df_09    = df_excel_ls_signals
+            self.TR_df_daily_09              = dt_excel_daily_pnl
+        except FileNotFoundError:
+            # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
+            [self.TR_df_09, self.holdings_df_09, self.weights_df_09, self.long_short_signals_df_09] = self.run_default_monthly_strategy_double_sorting(df_signals1=self.fwd_discount_last, df_signals2=self.relative_curvature, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
+            self.TR_df_daily_09 = self.run_daily_pnl(self.holdings_df_09, strategy_n)
+        print(strategy_name + ' OK - ', time.time() - time_start, ' seconds')
+
+    def run_strategy10(self):
+        time_start = time.time()
+        # Double sorting: first carry, second curvature
+        strategy_n = 10
+        strategy_name = 'Curvy-Carry DS'
+        name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        try:
+            # Try to read results from Excel files, otherwise run and write to Excel
+            df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
+            df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
+            df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
+            df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
+            self.TR_df_10                    = df_excel_tr
+            self.holdings_df_10              = df_excel_holdings
+            self.weights_df_10               = df_excel_weights
+            self.long_short_signals_df_10    = df_excel_ls_signals
+            self.TR_df_daily_10              = dt_excel_daily_pnl
+        except FileNotFoundError:
+            # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
+            [self.TR_df_10, self.holdings_df_10, self.weights_df_10, self.long_short_signals_df_10] = self.run_default_monthly_strategy_double_sorting(df_signals1=self.relative_curvature, df_signals2=self.fwd_discount_last, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
+            self.TR_df_daily_10 = self.run_daily_pnl(self.holdings_df_10, strategy_n)
+        print(strategy_name + ' OK - ', time.time() - time_start, ' seconds')
 
