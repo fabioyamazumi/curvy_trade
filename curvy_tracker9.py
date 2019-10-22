@@ -651,7 +651,10 @@ class CurvyTrade:
             filter2 = filter2.loc[filter2].index
             df_signals.loc[d, filter2] = -1
             # Weight calculation follows normal strategy approach (same weight for each FX)
-            unit_wgt = 1.0 / n_assets
+            if n_assets == 0:
+                unit_wgt = 0.0
+            else:
+                unit_wgt = 1.0 / n_assets
             weights.loc[d] = df_signals.loc[d] * unit_wgt
         return weights, df_signals
 
