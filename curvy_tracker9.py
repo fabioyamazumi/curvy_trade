@@ -35,11 +35,11 @@ class CurvyTrade:
     # TODO refactor code on strategies, so it can be standized by number
     # Available currencies
     # TODO DONE add 'BRL', 'CLP', 'COP', 'HUF', 'KRW', 'MXN', 'PHP', 'PLN', 'SGD', 'TRY', 'TWD', 'ZAR'
-    currency_list =         ['AUD', 'CAD', 'CHF', 'DEM', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'BRL', 'CLP', 'COP', 'MXN',
+    currency_list =         ['AUD', 'CAD', 'CHF', 'DEM', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'BRL', 'CLP', 'COP', 'MXN',
                              'CZK', 'HUF', 'PLN', 'TRY', 'RUB', 'INR', 'HKD', 'KRW', 'SGD', 'TWD', 'ZAR']
-    currency_list_curve =   ['AUD', 'CAD', 'CHF', 'DEM', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'USD', 'BRL', 'CLP', 'COP', 'MXN',
+    currency_list_curve =   ['AUD', 'CAD', 'CHF', 'DEM', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'USD', 'BRL', 'CLP', 'COP', 'MXN',
                              'CZK', 'HUF', 'PLN', 'TRY', 'RUB', 'INR', 'HKD', 'KRW', 'SGD', 'TWD', 'ZAR']
-    currency_list_DM =      ['AUD', 'CAD', 'CHF', 'DEM', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK']
+    currency_list_DM =      ['AUD', 'CAD', 'CHF', 'DEM', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK']
 
     # REMINDER
     # Dates: start and end dates are used for strategy period. Price/market data will start from vol_date (hardcoded)
@@ -53,6 +53,8 @@ class CurvyTrade:
 
     # tickers, start date, end date
     bbg_field_last = ['PX_LAST']
+    bbg_field_bid = ['PX_BID']
+    bbg_field_ask = ['PX_ASK']
     bbg_periodicity_spot = 'DAILY'
     bbg_periodicity_interest_curve = 'DAILY'
     # ini_date_bbg = '19890101'  # extended period for vol calculation
@@ -85,6 +87,7 @@ class CurvyTrade:
                    'CAD': 'CAD',
                    'CHF': 'CHF',
                    'DEM': 'DEM',
+                   'EUR': 'EUR',
                    'GBP': 'GBP',
                    'JPY': 'JPY',
                    'NOK': 'NOK',
@@ -165,8 +168,8 @@ class CurvyTrade:
         print('tickers OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
 
-        # TODO get bid and ask data... Forget it...
         # Prices
+        # Last price
         time_start = time.time()
         try:
             # Try to read spot_last.xlsx, otherwise get from BBG and write to Excel
@@ -176,6 +179,22 @@ class CurvyTrade:
             self.spot_last = self._get_spot_data(self.bbg_field_last)
             self.spot_last.to_excel(self.data_folder + '\\' + 'spot_last.xlsx')
         print('spot_last OK - ', time.time() - time_start, ' seconds')
+        # Bid and Ask of spot price
+        time_start = time.time()
+        try:
+            # Try to read spot_bid.xlsx, otherwise get from BBG and write to Excel
+            df_spot_bid = pd.read_excel(self.data_folder + '\\' + 'spot_bid.xlsx')
+            df_spot_ask = pd.read_excel(self.data_folder + '\\' + 'spot_ask.xlsx')
+            self.spot_bid = df_spot_bid
+            self.spot_ask = df_spot_ask
+        except FileNotFoundError:
+            self.spot_bid = self._get_spot_data(self.bbg_field_bid)
+            self.spot_ask = self._get_spot_data(self.bbg_field_ask)
+            self.adjust_spot_bid_ask()
+            self.spot_bid.to_excel(self.data_folder + '\\' + 'spot_bid.xlsx')
+            self.spot_ask.to_excel(self.data_folder + '\\' + 'spot_ask.xlsx')
+        print('spot_bid and ask OK - ', time.time() - time_start, ' seconds')
+        # Fwd points last
         time_start = time.time()
         try:
             # Try to read fwdpts_last.xlsx, otherwise get from BBG and write to Excel
@@ -185,17 +204,48 @@ class CurvyTrade:
             self.fwdpts_last = self._get_fwdpts_data(self.bbg_field_last)
             self.fwdpts_last.to_excel(self.data_folder + '\\' + 'fwdpts_last.xlsx')
         print('fwdpts_last OK - ', time.time() - time_start, ' seconds')
+        # Fwd points bid and ask
+        time_start = time.time()
+        try:
+            # Try to read fwdpts_bid.xlsx, otherwise get from BBG and write to Excel
+            # Try to read fwdpts_ask.xlsx, otherwise get from BBG and write to Excel
+            df_fwdpts_bid = pd.read_excel(self.data_folder + '\\' + 'fwdpts_bid.xlsx')
+            df_fwdpts_ask = pd.read_excel(self.data_folder + '\\' + 'fwdpts_ask.xlsx')
+            self.fwdpts_bid = df_fwdpts_bid
+            self.fwdpts_ask = df_fwdpts_ask
+        except FileNotFoundError:
+            self.fwdpts_bid = self._get_fwdpts_data(self.bbg_field_bid)
+            self.fwdpts_ask = self._get_fwdpts_data(self.bbg_field_ask)
+            self.adjust_fwdpts_bid_ask()
+            self.fwdpts_bid.to_excel(self.data_folder + '\\' + 'fwdpts_bid.xlsx')
+            self.fwdpts_ask.to_excel(self.data_folder + '\\' + 'fwdpts_ask.xlsx')
+        print('fwdpts_bid and ask OK - ', time.time() - time_start, ' seconds')
+        # Outright forward, last price
         time_start = time.time()
         self.fwd_last = self._get_fwd_outright(self.spot_last, self.fwdpts_last, self.ticker_scale)
         print('fwd_last OK - ', time.time() - time_start, ' seconds')
+        # Outright forward, bid price
+        time_start = time.time()
+        self.fwd_bid = self._get_fwd_outright(self.spot_bid, self.fwdpts_bid, self.ticker_scale)
+        print('fwd_bid OK - ', time.time() - time_start, ' seconds')
+        # Outright forward, ask price
+        time_start = time.time()
+        self.fwd_ask = self._get_fwd_outright(self.spot_ask, self.fwdpts_ask, self.ticker_scale)
+        print('fwd_ask OK - ', time.time() - time_start, ' seconds')
+        # prices in XXXUSD terms
         time_start = time.time()
         self.spot_last_XXXUSD = self.spot_last ** self.ticker_inverse
+        self.spot_bid_XXXUSD = self.spot_bid ** self.ticker_inverse
+        self.spot_ask_XXXUSD = self.spot_ask ** self.ticker_inverse
         self.fwd_last_XXXUSD = self.fwd_last ** self.ticker_inverse
+        self.fwd_bid_XXXUSD = self.fwd_bid ** self.ticker_inverse
+        self.fwd_ask_XXXUSD = self.fwd_ask ** self.ticker_inverse
         self.fwd_discount_last = (self.spot_last_XXXUSD / self.fwd_last_XXXUSD - 1) * 12 # signal fwd premium
         print('fwd_discount_last OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
         # self.vols = self._ewma_vol(ewma_lambda=0.94) #  discontinued after version 8
         self.vols = self._std_vol(window=126)
+        self.adjust_vol()
         self.vols.to_excel(self.data_folder + '\\' + 'vols.xlsx')
         print('vol EWMA OK - ', time.time() - time_start, ' seconds')
         self.currency_list_EM = self.build_currency_list_EM()
@@ -325,21 +375,38 @@ class CurvyTrade:
         # Traditional Carry Trade
         strategy_n = 1
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.fwd_discount_last
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_01                    = df_excel_tr
             self.holdings_df_01              = df_excel_holdings
             self.weights_df_01               = df_excel_weights
             self.long_short_signals_df_01    = df_excel_ls_signals
+            self.ir_01                       = df_excel_ir
+            self.sr_01                       = df_excel_sr
+            self.cost_01                     = df_excel_cost
+            self.pct_pnlfx_01                = df_excel_pnlfx
+            self.pct_irfx_01                 = df_excel_irfx
+            self.pct_srfx_01                 = df_excel_srfx
+            self.pct_costfx_01               = df_excel_costfx
             self.TR_df_daily_01              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_01, self.holdings_df_01, self.weights_df_01, self.long_short_signals_df_01] = self.run_default_monthly_strategy(df_signals=self.fwd_discount_last, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            [self.TR_df_01, self.holdings_df_01, self.weights_df_01, self.long_short_signals_df_01, self.ir_01, self.sr_01,
+             self.cost_01, self.pct_pnlfx_01, self.pct_irfx_01, self.pct_srfx_01, self.pct_costfx_01] = \
+                self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_01 = self.run_daily_pnl(self.holdings_df_01, strategy_n)
         print('Carry trade OK - ', time.time() - time_start, ' seconds')
 
@@ -348,21 +415,38 @@ class CurvyTrade:
         # Traditional CURVY Trade (Nelson-Siegel curvature)
         strategy_n = 2
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_curvature
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_02                    = df_excel_tr
             self.holdings_df_02              = df_excel_holdings
             self.weights_df_02               = df_excel_weights
             self.long_short_signals_df_02    = df_excel_ls_signals
+            self.ir_02                       = df_excel_ir
+            self.sr_02                       = df_excel_sr
+            self.cost_02                     = df_excel_cost
+            self.pct_pnlfx_02                = df_excel_pnlfx
+            self.pct_irfx_02                 = df_excel_irfx
+            self.pct_srfx_02                 = df_excel_srfx
+            self.pct_costfx_02               = df_excel_costfx
             self.TR_df_daily_02              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_02, self.holdings_df_02, self.weights_df_02, self.long_short_signals_df_02] = self.run_default_monthly_strategy(df_signals=self.relative_curvature, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            [self.TR_df_02, self.holdings_df_02, self.weights_df_02, self.long_short_signals_df_02, self.ir_02, self.sr_02,
+             self.cost_02, self.pct_pnlfx_02, self.pct_irfx_02, self.pct_srfx_02, self.pct_costfx_02] = \
+                self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_02 = self.run_daily_pnl(self.holdings_df_02, strategy_n)
         print('Curvy trade OK - ', time.time() - time_start, ' seconds')
 
@@ -371,21 +455,38 @@ class CurvyTrade:
         # Traditional level Trade (Nelson-Siegel level)
         strategy_n = 3
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_level
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_03                    = df_excel_tr
             self.holdings_df_03              = df_excel_holdings
             self.weights_df_03               = df_excel_weights
             self.long_short_signals_df_03    = df_excel_ls_signals
+            self.ir_03                       = df_excel_ir
+            self.sr_03                       = df_excel_sr
+            self.cost_03                     = df_excel_cost
+            self.pct_pnlfx_03                = df_excel_pnlfx
+            self.pct_irfx_03                 = df_excel_irfx
+            self.pct_srfx_03                 = df_excel_srfx
+            self.pct_costfx_03               = df_excel_costfx
             self.TR_df_daily_03              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_03, self.holdings_df_03, self.weights_df_03, self.long_short_signals_df_03] = self.run_default_monthly_strategy(df_signals=self.relative_level, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            [self.TR_df_03, self.holdings_df_03, self.weights_df_03, self.long_short_signals_df_03, self.ir_03, self.sr_03,
+             self.cost_03, self.pct_pnlfx_03, self.pct_irfx_03, self.pct_srfx_03, self.pct_costfx_03] = \
+                self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_03 = self.run_daily_pnl(self.holdings_df_03, strategy_n)
         print('Level trade OK - ', time.time() - time_start, ' seconds')
 
@@ -394,21 +495,38 @@ class CurvyTrade:
         # Traditional slope Trade (Nelson-Siegel slope)
         strategy_n = 4
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_slope
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_04                    = df_excel_tr
             self.holdings_df_04              = df_excel_holdings
             self.weights_df_04               = df_excel_weights
             self.long_short_signals_df_04    = df_excel_ls_signals
+            self.ir_04                       = df_excel_ir
+            self.sr_04                       = df_excel_sr
+            self.cost_04                     = df_excel_cost
+            self.pct_pnlfx_04                = df_excel_pnlfx
+            self.pct_irfx_04                 = df_excel_irfx
+            self.pct_srfx_04                 = df_excel_srfx
+            self.pct_costfx_04               = df_excel_costfx
             self.TR_df_daily_04              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_04, self.holdings_df_04, self.weights_df_04, self.long_short_signals_df_04] = self.run_default_monthly_strategy(df_signals=self.relative_slope, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
+            [self.TR_df_04, self.holdings_df_04, self.weights_df_04, self.long_short_signals_df_04, self.ir_04, self.sr_04,
+             self.cost_04, self.pct_pnlfx_04, self.pct_irfx_04, self.pct_srfx_04, self.pct_costfx_04] = \
+                self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_04 = self.run_daily_pnl(self.holdings_df_04, strategy_n)
         print('Slope trade OK - ', time.time() - time_start, ' seconds')
 
@@ -419,21 +537,38 @@ class CurvyTrade:
         strategy_n = 5
         self.carry_trade_target_vol = 0.09
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.fwd_discount_last
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_05                    = df_excel_tr
-            self.holdings_05                 = df_excel_holdings
+            self.holdings_df_05              = df_excel_holdings
             self.weights_df_05               = df_excel_weights
             self.long_short_signals_df_05    = df_excel_ls_signals
+            self.ir_05                       = df_excel_ir
+            self.sr_05                       = df_excel_sr
+            self.cost_05                     = df_excel_cost
+            self.pct_pnlfx_05                = df_excel_pnlfx
+            self.pct_irfx_05                 = df_excel_irfx
+            self.pct_srfx_05                 = df_excel_srfx
+            self.pct_costfx_05               = df_excel_costfx
             self.TR_df_daily_05              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_05, self.holdings_df_05, self.weights_df_05, self.long_short_signals_df_05] = self.run_equal_vol_monthly_strategy(df_signals=self.fwd_discount_last, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
+            [self.TR_df_05, self.holdings_df_05, self.weights_df_05, self.long_short_signals_df_05, self.ir_05, self.sr_05,
+             self.cost_05, self.pct_pnlfx_05, self.pct_irfx_05, self.pct_srfx_05, self.pct_costfx_05] = \
+                self.run_equal_vol_monthly_strategy(df_signals=strategy_criteria, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
             self.TR_df_daily_05 = self.run_daily_pnl(self.holdings_df_05, strategy_n)
         print('Equal vol Carry trade OK - ', time.time() - time_start, ' seconds')
 
@@ -443,21 +578,38 @@ class CurvyTrade:
         strategy_n = 6
         self.curvy_trade_target_vol = 0.09
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_curvature
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_06                    = df_excel_tr
             self.holdings_df_06              = df_excel_holdings
             self.weights_df_06               = df_excel_weights
             self.long_short_signals_df_06    = df_excel_ls_signals
+            self.ir_06                       = df_excel_ir
+            self.sr_06                       = df_excel_sr
+            self.cost_06                     = df_excel_cost
+            self.pct_pnlfx_06                = df_excel_pnlfx
+            self.pct_irfx_06                 = df_excel_irfx
+            self.pct_srfx_06                 = df_excel_srfx
+            self.pct_costfx_06               = df_excel_costfx
             self.TR_df_daily_06              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_06, self.holdings_df_06, self.weights_df_06, self.long_short_signals_df_06] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_curvature, target_vol=self.curvy_trade_target_vol, strategy_n=strategy_n)
+            [self.TR_df_06, self.holdings_df_06, self.weights_df_06, self.long_short_signals_df_06, self.ir_06, self.sr_06,
+             self.cost_06, self.pct_pnlfx_06, self.pct_irfx_06, self.pct_srfx_06, self.pct_costfx_06] = \
+                self.run_equal_vol_monthly_strategy(df_signals=strategy_criteria, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
             self.TR_df_daily_06 = self.run_daily_pnl(self.holdings_df_06, strategy_n)
         print('Equal vol Curvy trade OK - ', time.time() - time_start, ' seconds')
 
@@ -467,21 +619,38 @@ class CurvyTrade:
         strategy_n = 7
         self.level_trade_target_vol = 0.09
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_level
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_07                    = df_excel_tr
             self.holdings_df_07              = df_excel_holdings
             self.weights_df_07               = df_excel_weights
             self.long_short_signals_df_07    = df_excel_ls_signals
+            self.ir_07                       = df_excel_ir
+            self.sr_07                       = df_excel_sr
+            self.cost_07                     = df_excel_cost
+            self.pct_pnlfx_07                = df_excel_pnlfx
+            self.pct_irfx_07                 = df_excel_irfx
+            self.pct_srfx_07                 = df_excel_srfx
+            self.pct_costfx_07               = df_excel_costfx
             self.TR_df_daily_07              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_07, self.holdings_df_07, self.weights_df_07, self.long_short_signals_df_07] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_level, target_vol=self.level_trade_target_vol, strategy_n=strategy_n)
+            [self.TR_df_07, self.holdings_df_07, self.weights_df_07, self.long_short_signals_df_07, self.ir_07, self.sr_07,
+             self.cost_07, self.pct_pnlfx_07, self.pct_irfx_07, self.pct_srfx_07, self.pct_costfx_07] = \
+                self.run_equal_vol_monthly_strategy(df_signals=strategy_criteria, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
             self.TR_df_daily_07 = self.run_daily_pnl(self.holdings_df_07, strategy_n)
         print('Equal vol Level trade OK - ', time.time() - time_start, ' seconds')
 
@@ -491,21 +660,38 @@ class CurvyTrade:
         strategy_n = 8
         self.slope_trade_target_vol = 0.09
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
+        strategy_criteria = self.relative_slope
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
             df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_08                    = df_excel_tr
             self.holdings_df_08              = df_excel_holdings
             self.weights_df_08               = df_excel_weights
             self.long_short_signals_df_08    = df_excel_ls_signals
+            self.ir_08                       = df_excel_ir
+            self.sr_08                       = df_excel_sr
+            self.cost_08                     = df_excel_cost
+            self.pct_pnlfx_08                = df_excel_pnlfx
+            self.pct_irfx_08                 = df_excel_irfx
+            self.pct_srfx_08                 = df_excel_srfx
+            self.pct_costfx_08               = df_excel_costfx
             self.TR_df_daily_08              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_08, self.holdings_df_08, self.weights_df_08, self.long_short_signals_df_08] = self.run_equal_vol_monthly_strategy(df_signals=self.relative_slope, target_vol=self.slope_trade_target_vol, strategy_n=strategy_n)
+            [self.TR_df_08, self.holdings_df_08, self.weights_df_08, self.long_short_signals_df_08, self.ir_08, self.sr_08,
+             self.cost_08, self.pct_pnlfx_08, self.pct_irfx_08, self.pct_srfx_08, self.pct_costfx_08] = \
+                self.run_equal_vol_monthly_strategy(df_signals=strategy_criteria, target_vol=self.carry_trade_target_vol, strategy_n=strategy_n)
             self.TR_df_daily_08 = self.run_daily_pnl(self.holdings_df_08, strategy_n)
         print('Equal vol Slope trade OK - ', time.time() - time_start, ' seconds')
 
@@ -551,7 +737,6 @@ class CurvyTrade:
         df_inverse.loc[df_inverse['value'] == "N", 'value'] = -1
         df_tickers['inverse'] = df_inverse['value']
         # Forward curve tickers
-        # TODO for DEM, replace BGN for CMPN
         df_tickers['1w'] = [self.dict_FX_NDF[c] + '1W BGN Curncy' for c in self.currency_list]
         df_tickers['2w'] = [self.dict_FX_NDF[c] + '2W BGN Curncy' for c in self.currency_list]
         df_tickers['3w'] = [self.dict_FX_NDF[c] + '3W BGN Curncy' for c in self.currency_list]
@@ -575,6 +760,36 @@ class CurvyTrade:
         spot_last_extended_calendar = spot_last_extended_calendar.combine(spot_last, func=_take_second)
         spot_last_extended_calendar.fillna(method='ffill', inplace=True)
         return spot_last_extended_calendar
+
+    def adjust_spot_bid_ask(self):
+        fx_side = self.df_tickers['inverse']
+        _bid = self.spot_bid.copy(deep=True)
+        _ask = self.spot_ask.copy(deep=True)
+        for curncy in self.currency_list:
+            if fx_side.loc[curncy] == -1:
+                self.spot_bid[curncy] = _ask[curncy]
+                self.spot_ask[curncy] = _bid[curncy]
+        self.spot_last.loc['1998-12':]['DEM'] = np.NaN
+        self.spot_last.loc[:'1998-12']['EUR'] = np.NaN
+
+
+    def adjust_fwdpts_bid_ask(self):
+        fx_side = self.df_tickers['inverse']
+        _bid = self.fwdpts_bid.copy(deep=True)
+        _ask = self.fwdpts_ask.copy(deep=True)
+        for curncy in self.currency_list:
+            if fx_side.loc[curncy] == -1:
+                self.fwdpts_bid[curncy] = _ask[curncy]
+                self.fwdpts_ask[curncy] = _bid[curncy]
+        self.fwdpts_last.loc['1998-12':]['DEM'] = np.NaN
+        self.fwdpts_last.loc[:'1998-12']['EUR'] = np.NaN
+
+    def adjust_vol(self):
+        if 'DEM' in self.currency_list:
+            self.vols['DEM'].loc['1998-12':] = np.NaN
+            lst_DEM_vol = float(self.vols['DEM'].dropna()[-1])
+            self.vols['EUR'].loc['1999-01':'1999-06-25'] = lst_DEM_vol
+
 
     def _get_fwdpts_data(self, bbg_field=['PX_LAST']):
         fwd_pts_last = self.con.bdh(self.ticker_fwdpts_1m, bbg_field, self.ini_date_prices_bbg, self.end_date_bbg, elms=[("periodicitySelection", self.bbg_periodicity_spot)])
@@ -711,7 +926,7 @@ class CurvyTrade:
         self.vols.multiply(100).plot(figsize=figure_size, title='Vols (annualized 252 bdays)')
         plt.show()
 
-    def _run_default_monthly_strategy(self, df_forwards, df_spots, df_ranking, func_weight, k):
+    def _run_default_monthly_strategy(self, df_ranking, func_weight, k):
         # df_forwards should be in XXXUSD
         # d=day, tm1=t minus 1
         TR_index = pd.DataFrame(index=self.monthly_calendar, columns=['TR_index'])
@@ -719,22 +934,103 @@ class CurvyTrade:
         # weights and signals are calculated daily, but this functions should only return the ones used in strategy.
         weights_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
         signals_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        traded_forward = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        settle_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        traded_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        cost_index = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        cost_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in units of USD for each currency
+        cost_pct = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in %
+        cost_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        pnl_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)  # pnl in % for each currency
+        interest_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        interest_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        spot_return_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
         [weights, signals] = func_weight(df_ranking, k)  # Daily data
-        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
         weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
         signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
+        traded_forward.loc[d_ini, self.currency_list] = self.fwd_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list])
+        traded_spot.loc[d_ini, self.currency_list] = self.spot_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list].multiply(-1)) # Get spot quote for the same side as forward (used in spot return)
+        # holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
+        holdings.loc[d_ini, self.currency_list] = ((100.0 * weights_used.loc[d_ini]) / traded_forward.loc[d_ini])  # fwd should be XXXUSD
+
+        cost_of_trading_fx = holdings.loc[d_ini, self.currency_list] * self.fwd_last_XXXUSD.loc[d_ini, self.currency_list] - weights_used.loc[d_ini, self.currency_list] * TR_index.loc[d_ini]
+        cost_index.loc[d_ini] = cost_of_trading_fx.sum() # cost is positive (for comparative reason: eg. plotting with TR_index)
+        cost_pct.loc[d_ini] = cost_index.loc[d_ini] / TR_index.loc[d_ini]
+        cost_index_fx.loc[d_ini] = cost_of_trading_fx
+        cost_fx_pct.loc[d_ini] = cost_of_trading_fx / float(TR_index.loc[d_ini])
+        interest_return_index.loc[d_ini] = 100.0
+        spot_return_index.loc[d_ini] = 100.0
+        cost_of_settle.loc[d_ini] = 0.0
+        spot_return_index_fx.loc[d_ini] = 100.0
+
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
-            pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            settle_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[tm1, self.currency_list])
+            # pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            # concept: return of a long forward position
+            # fwd_ask[tm1] = spot_ask[tm1] + fwd_pts_ask[tm1]
+            # total return = holdings[tm1] * (spot_bid[d] - fwd_ask[tm1])
+            # interest return = holdings[tm1] * (spot_ask[tm1] - fwd_ask[tm1])  or  holdings[tm1] * (0 - fwd_pts_ask[tm1])
+            # spot return = holdings[tm1] * (spot_bid[d] - spot_ask[tm1])
+
+            pnl = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list])).sum() # pnl in units of USD
+            pnl_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list]))
+            pnl_fx_pct.loc[d, self.currency_list] = pnl_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            interest_return_fx = (holdings.loc[tm1, self.currency_list] * (traded_spot.loc[tm1, self.currency_list] - traded_forward.loc[tm1, self.currency_list])) # pnl in units of USD
+            interest_return_index.loc[d] = interest_return_index.loc[tm1] + interest_return_fx.sum() # pnl in units of USD
+            interest_return_fx_pct.loc[d] = interest_return_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            spot_return_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_spot.loc[tm1, self.currency_list]))  # pnl in units of USD
+            spot_return_index.loc[d] = spot_return_index.loc[tm1] + spot_return_fx.sum()
+            spot_return_index_fx.loc[d] = spot_return_index_fx.loc[tm1] + spot_return_fx.loc[self.currency_list]
+            spot_return_fx_pct.loc[d] = spot_return_fx.loc[self.currency_list] / float(TR_index.loc[tm1])
+            cost_of_settle_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - self.spot_last_XXXUSD.loc[d, self.currency_list])).multiply(-1)
+            cost_of_settle.loc[d] = cost_of_settle.loc[tm1] + cost_of_settle_fx.sum() # in units of USD (cost is positive)
+            cost_of_settle_fx_pct.loc[d] = cost_of_settle_fx / float(TR_index.loc[tm1])  # pnl in %
+
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
             dm1 = d - BDay(1)
             # Adding 1 day delay to weights and signals used for trading
-            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
             weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
             signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
-        return TR_index, holdings, weights_used, signals_used
+            traded_forward.loc[d, self.currency_list] = self.fwd_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list])
+            traded_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list].multiply(-1))  # Get spot quote for the same side as forward (used in spot return)
+            holdings.loc[d] = (TR_index.loc[d].values * weights_used.loc[d] / traded_forward.loc[d])
+
+            cost_of_trading_fx = holdings.loc[d, self.currency_list] * self.fwd_last_XXXUSD.loc[d, self.currency_list] - weights_used.loc[d, self.currency_list] * TR_index.loc[d]
+            cost_index.loc[d] = cost_index.loc[tm1] + cost_of_settle_fx.sum() + cost_of_trading_fx.sum() # cost is positive (for comparative reason, eg. plotting with TR_index)
+            cost_pct.loc[d] = (cost_index.loc[d] - cost_index.loc[tm1]) / TR_index.loc[d]
+            cost_index_fx.loc[d, self.currency_list] = cost_index_fx.loc[tm1, self.currency_list] + cost_of_settle_fx.loc[self.currency_list] + cost_of_trading_fx.loc[self.currency_list]
+            cost_fx_pct.loc[d] = (cost_of_trading_fx + cost_of_settle_fx)/ float(TR_index.loc[d])
+
+        return TR_index, holdings, weights_used, signals_used, interest_return_index, spot_return_index, cost_index, pnl_fx_pct, interest_return_fx_pct, spot_return_fx_pct, cost_fx_pct
+
+    def fwd_pricer(self, trade_date, df_trading_side):
+        traded_fwd_price = pd.Series(data=None, index=df_trading_side.index)
+        # Buy at ask price
+        traded_tickers = df_trading_side > 0.0
+        traded_fwd_price[traded_tickers] = self.fwd_ask_XXXUSD.loc[trade_date, traded_tickers]
+        # Sell at bid price
+        traded_tickers = df_trading_side < 0.0
+        traded_fwd_price[traded_tickers] = self.fwd_bid_XXXUSD.loc[trade_date, traded_tickers]
+        return traded_fwd_price
+
+    def spot_pricer(self, trade_date, df_trading_side):
+        traded_spot_price = pd.Series(data=None, index=df_trading_side.index)
+        # inverted signal, as spot should be traded in order to unwind an existing forward position
+        # Buy spot at ask price (if existing forward is short)
+        traded_tickers = df_trading_side < 0.0
+        traded_spot_price[traded_tickers] = self.spot_ask_XXXUSD.loc[trade_date, traded_tickers]
+        # Sell spot at bid price (if existing forward is long)
+        traded_tickers = df_trading_side > 0.0
+        traded_spot_price[traded_tickers] = self.spot_bid_XXXUSD.loc[trade_date, traded_tickers]
+        return traded_spot_price
 
     def _run_default_monthly_strategy_double_sorting(self, df_forwards, df_spots, df_ranking1, df_ranking2, func_weight, groups, subgroups):
         # df_forwards should be in XXXUSD
@@ -744,22 +1040,82 @@ class CurvyTrade:
         # weights and signals are calculated daily, but this functions should only return the ones used in strategy.
         weights_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
         signals_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+
+        traded_forward = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        settle_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        traded_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        cost_index = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        cost_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in units of USD for each currency
+        cost_pct = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in %
+        cost_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        pnl_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)  # pnl in % for each currency
+        interest_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        interest_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        spot_return_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
         [weights, signals] = func_weight(df_ranking1, df_ranking2, groups, subgroups)  # Daily data
-        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
         weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
         signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
+        traded_forward.loc[d_ini, self.currency_list] = self.fwd_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list])
+        traded_spot.loc[d_ini, self.currency_list] = self.spot_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list].multiply(-1)) # Get spot quote for the same side as forward (used in spot return)
+        holdings.loc[d_ini] = ((100.0 * weights_used.loc[d_ini]) / traded_forward.loc[d_ini])  # fwd should be XXXUSD
+
+        cost_of_trading_fx = holdings.loc[d_ini, self.currency_list] * self.fwd_last_XXXUSD.loc[d_ini, self.currency_list] - weights_used.loc[d_ini, self.currency_list] * TR_index.loc[d_ini]
+        cost_index.loc[d_ini] = cost_of_trading_fx.sum() # cost is positive (for comparative reason: eg. plotting with TR_index)
+        cost_pct.loc[d_ini] = cost_index.loc[d_ini] / TR_index.loc[d_ini]
+        cost_index_fx.loc[d_ini, self.currency_list] = cost_of_trading_fx.loc[self.currency_list]
+        cost_fx_pct.loc[d_ini] = cost_of_trading_fx / float(TR_index.loc[d_ini])
+        interest_return_index.loc[d_ini] = 100.0
+        spot_return_index.loc[d_ini] = 100.0
+        cost_of_settle.loc[d_ini] = 0.0
+        spot_return_index_fx.loc[d_ini] = 100.0
+
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
-            pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            settle_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[tm1, self.currency_list])
+            # pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            # concept: return of a long forward position
+            # fwd_ask[tm1] = spot_ask[tm1] + fwd_pts_ask[tm1]
+            # total return = holdings[tm1] * (spot_bid[d] - fwd_ask[tm1])
+            # interest return = holdings[tm1] * (spot_ask[tm1] - fwd_ask[tm1])  or  holdings[tm1] * (0 - fwd_pts_ask[tm1])
+            # spot return = holdings[tm1] * (spot_bid[d] - spot_ask[tm1])
+
+            pnl = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list])).sum() # pnl in units of USD
+            pnl_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list]))
+            pnl_fx_pct.loc[d, self.currency_list] = pnl_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            interest_return_fx = (holdings.loc[tm1, self.currency_list] * (traded_spot.loc[tm1, self.currency_list] - traded_forward.loc[tm1, self.currency_list])) # pnl in units of USD
+            interest_return_index.loc[d] = interest_return_index.loc[tm1] + interest_return_fx.sum() # pnl in units of USD
+            interest_return_fx_pct.loc[d] = interest_return_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            spot_return_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_spot.loc[tm1, self.currency_list]))  # pnl in units of USD
+            spot_return_index.loc[d] = spot_return_index.loc[tm1] + spot_return_fx.sum()
+            spot_return_index_fx.loc[d] = spot_return_index_fx.loc[tm1] + spot_return_fx.loc[self.currency_list]
+            spot_return_fx_pct.loc[d] = spot_return_fx.loc[self.currency_list] / float(TR_index.loc[tm1])
+            cost_of_settle_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - self.spot_last_XXXUSD.loc[d, self.currency_list])).multiply(-1)
+            cost_of_settle.loc[d] = cost_of_settle.loc[tm1] + cost_of_settle_fx.sum() # in units of USD (cost is positive)
+            cost_of_settle_fx_pct.loc[d] = cost_of_settle_fx / float(TR_index.loc[tm1])  # pnl in %
+
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
             dm1 = d - BDay(1)
             # Adding 1 day delay to weights and signals used for trading
-            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
             weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
             signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
-        return TR_index, holdings, weights_used, signals_used
+            traded_forward.loc[d, self.currency_list] = self.fwd_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list])
+            traded_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list].multiply(-1))  # Get spot quote for the same side as forward (used in spot return)
+            holdings.loc[d] = (TR_index.loc[d].values * weights_used.loc[d] / traded_forward.loc[d])
+
+            cost_of_trading_fx = holdings.loc[d, self.currency_list] * self.fwd_last_XXXUSD.loc[d, self.currency_list] - weights_used.loc[d, self.currency_list] * TR_index.loc[d]
+            cost_index.loc[d] = cost_index.loc[tm1] + cost_of_settle_fx.sum() + cost_of_trading_fx.sum() # cost is positive (for comparative reason, eg. plotting with TR_index)
+            cost_pct.loc[d] = (cost_index.loc[d] - cost_index.loc[tm1]) / TR_index.loc[d]
+            cost_index_fx.loc[d, self.currency_list] = cost_index_fx.loc[tm1, self.currency_list] + cost_of_settle_fx.loc[self.currency_list] + cost_of_trading_fx.loc[self.currency_list]
+            cost_fx_pct.loc[d] = (cost_of_trading_fx + cost_of_settle_fx)/ float(TR_index.loc[d])
+
+        return TR_index, holdings, weights_used, signals_used, interest_return_index, spot_return_index, cost_index, pnl_fx_pct, interest_return_fx_pct, spot_return_fx_pct, cost_fx_pct
 
     def run_default_monthly_strategy(self, df_signals, func_weight, strategy_n=0):
         """
@@ -769,19 +1125,35 @@ class CurvyTrade:
         df_ranking = self._simple_ranking(df_signals_smooth)
         # TR_df
         TR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        IR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        SR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        Cost_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
         # holdings_df, weights_df, long_short_signals_df
         iterables_k = [self.k_list, self.monthly_calendar]
         idx = pd.MultiIndex.from_product(iterables=iterables_k)
         holdings_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         weights_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         long_short_signals_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        pct_pnl_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_IR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_SR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_Cost_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
 
         for k in self.k_range:
-            [TR_index_k, holdings_k, weights_k, signals_k] = self._run_default_monthly_strategy(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking, func_weight, k=k)
+            [TR_index_k, holdings_k, weights_k, signals_k, IR_index_k, SR_index_k, Cost_index_k, Pct_pnlFX_k, Pct_IR_fx_k, Pct_SR_fx_k, Pct_Cost_fx_k] = \
+                self._run_default_monthly_strategy(df_ranking=df_ranking, func_weight=func_weight, k=k)
+
             TR_df['k' + str(k)] = TR_index_k
             holdings_df.loc['k' + str(k)] = holdings_k.values
             weights_df.loc['k' + str(k)] = weights_k.values
             long_short_signals_df.loc['k' + str(k)] = signals_k.values
+            IR_df['k' + str(k)] = IR_index_k
+            SR_df['k' + str(k)] = SR_index_k
+            Cost_df['k' + str(k)] = Cost_index_k
+            pct_pnl_fx_df.loc['k' + str(k)] = Pct_pnlFX_k.values
+            Pct_IR_fx_df.loc['k' + str(k)] = Pct_IR_fx_k.values
+            Pct_SR_fx_df.loc['k' + str(k)] = Pct_SR_fx_k.values
+            Pct_Cost_fx_df.loc['k' + str(k)] = Pct_Cost_fx_k.values
 
         #Write results in 'data' folder as Excel file. File will be name according with strategy number
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
@@ -789,8 +1161,15 @@ class CurvyTrade:
         holdings_df.to_excel(name_start + 'Holdings.xlsx')
         weights_df.to_excel(name_start + 'Weights.xlsx')
         long_short_signals_df.to_excel(name_start + 'LS_Signals.xlsx')
+        IR_df.to_excel(name_start + 'IR.xlsx') # interest return
+        SR_df.to_excel(name_start + 'SR.xlsx') # spot return
+        Cost_df.to_excel(name_start + 'Cost.xlsx')  # Cost index
+        pct_pnl_fx_df.to_excel(name_start + 'PctPnlFX.xlsx')  # total return by fx
+        Pct_IR_fx_df.to_excel(name_start + 'PctIRFX.xlsx')  # Interest return by fx
+        Pct_SR_fx_df.to_excel(name_start + 'PctSRFX.xlsx')  # spot return by fx
+        Pct_Cost_fx_k.to_excel(name_start + 'PctCostFX.xlsx')  # Cost by fx
 
-        return TR_df, holdings_df, weights_df, long_short_signals_df
+        return TR_df, holdings_df, weights_df, long_short_signals_df, IR_df, SR_df, Cost_df, pct_pnl_fx_df, Pct_IR_fx_df, Pct_SR_fx_df, Pct_Cost_fx_k
 
     def run_default_monthly_strategy_double_sorting(self, df_signals1, df_signals2, func_weight, strategy_n=0, groups=3, subgroups=2):
         """
@@ -804,19 +1183,34 @@ class CurvyTrade:
 
         # TR_df
         TR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        IR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        SR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        Cost_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
         # holdings_df, weights_df, long_short_signals_df
         iterables_k = [self.k_list, self.monthly_calendar]
         idx = pd.MultiIndex.from_product(iterables=iterables_k)
         holdings_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         weights_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         long_short_signals_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        pct_pnl_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_IR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_SR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_Cost_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
 
-        [TR_index_k, holdings_k, weights_k, signals_k] = self._run_default_monthly_strategy_double_sorting(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking1, df_ranking2, func_weight, groups, subgroups)
+        [TR_index_k, holdings_k, weights_k, signals_k, IR_index_k, SR_index_k, Cost_index_k, Pct_pnlFX_k, Pct_IR_fx_k, Pct_SR_fx_k, Pct_Cost_fx_k] = \
+            self._run_default_monthly_strategy_double_sorting(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking1, df_ranking2, func_weight, groups, subgroups)
         for k in self.k_range:
             TR_df['k' + str(k)] = TR_index_k
             holdings_df.loc['k' + str(k)] = holdings_k.values
             weights_df.loc['k' + str(k)] = weights_k.values
             long_short_signals_df.loc['k' + str(k)] = signals_k.values
+            IR_df['k' + str(k)] = IR_index_k
+            SR_df['k' + str(k)] = SR_index_k
+            Cost_df['k' + str(k)] = Cost_index_k
+            pct_pnl_fx_df.loc['k' + str(k)] = Pct_pnlFX_k.values
+            Pct_IR_fx_df.loc['k' + str(k)] = Pct_IR_fx_k.values
+            Pct_SR_fx_df.loc['k' + str(k)] = Pct_SR_fx_k.values
+            Pct_Cost_fx_df.loc['k' + str(k)] = Pct_Cost_fx_k.values
 
         #Write results in 'data' folder as Excel file. File will be name according with strategy number
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
@@ -824,8 +1218,15 @@ class CurvyTrade:
         holdings_df.to_excel(name_start + 'Holdings.xlsx')
         weights_df.to_excel(name_start + 'Weights.xlsx')
         long_short_signals_df.to_excel(name_start + 'LS_Signals.xlsx')
+        IR_df.to_excel(name_start + 'IR.xlsx') # interest return
+        SR_df.to_excel(name_start + 'SR.xlsx') # spot return
+        Cost_df.to_excel(name_start + 'Cost.xlsx')  # Cost index
+        pct_pnl_fx_df.to_excel(name_start + 'PctPnlFX.xlsx')  # total return by fx
+        Pct_IR_fx_df.to_excel(name_start + 'PctIRFX.xlsx')  # Interest return by fx
+        Pct_SR_fx_df.to_excel(name_start + 'PctSRFX.xlsx')  # spot return by fx
+        Pct_Cost_fx_k.to_excel(name_start + 'PctCostFX.xlsx')  # Cost by fx
 
-        return TR_df, holdings_df, weights_df, long_short_signals_df
+        return TR_df, holdings_df, weights_df, long_short_signals_df, IR_df, SR_df, Cost_df, pct_pnl_fx_df, Pct_IR_fx_df, Pct_SR_fx_df, Pct_Cost_fx_k
 
     @staticmethod
     def _plot_total_return(total_return_df, chart_title, figure_size, log_y=True):
@@ -840,7 +1241,7 @@ class CurvyTrade:
         self.TR_df.plot(figsize=figure_size, title=chart_title, logy=log_y)
         plt.show()
 
-    def _run_equal_vol_monthly_strategy(self, df_forwards, df_spots, df_ranking, df_vol, target_vol=0.06, k=1):
+    def _run_equal_vol_monthly_strategy(self, df_ranking, df_vol, target_vol=0.06, k=1):
         # df_forwards should be in XXXUSD
         # d=day, tm1=t minus 1
         TR_index = pd.DataFrame(index=self.monthly_calendar, columns=['TR_index'])
@@ -848,22 +1249,83 @@ class CurvyTrade:
         # weights and signals are calculated daily, but this functions should only return the ones used in strategy.
         weights_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
         signals_used = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+
+        traded_forward = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        settle_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        traded_spot = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        cost_index = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in units of USD
+        cost_of_settle_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        cost_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in units of USD for each currency
+        cost_pct = pd.DataFrame(index=self.monthly_calendar, columns=['index']) # cost in %
+        cost_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list) # cost in % for each currency
+        pnl_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)  # pnl in % for each currency
+        interest_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        interest_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
+        spot_return_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        spot_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
         [weights, signals] = self._ranking_to_equalvolwgt(df_ranking, df_vol, target_vol, k)
-        holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
         weights_used.loc[d_ini, self.currency_list] = weights.loc[d_ini - BDay(1), self.currency_list]
         signals_used.loc[d_ini, self.currency_list] = signals.loc[d_ini - BDay(1), self.currency_list]
+        traded_forward.loc[d_ini, self.currency_list] = self.fwd_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list])
+        traded_spot.loc[d_ini, self.currency_list] = self.spot_pricer(trade_date=d_ini, df_trading_side=weights_used.loc[d_ini, self.currency_list].multiply(-1)) # Get spot quote for the same side as forward (used in spot return)
+        # holdings.loc[d_ini] = ((100.0 * weights.loc[d_ini - BDay(1)]) / df_forwards.loc[d_ini])  # fwd should be XXXUSD
+        holdings.loc[d_ini, self.currency_list] = ((100.0 * weights_used.loc[d_ini]) / traded_forward.loc[d_ini])  # fwd should be XXXUSD
+
+        cost_of_trading_fx = holdings.loc[d_ini, self.currency_list] * self.fwd_last_XXXUSD.loc[d_ini, self.currency_list] - weights_used.loc[d_ini, self.currency_list] * TR_index.loc[d_ini]
+        cost_index.loc[d_ini] = cost_of_trading_fx.sum() # cost is positive (for comparative reason: eg. plotting with TR_index)
+        cost_pct.loc[d_ini] = cost_index.loc[d_ini] / TR_index.loc[d_ini]
+        cost_index_fx.loc[d_ini, self.currency_list] = cost_of_trading_fx.loc[self.currency_list]
+        cost_fx_pct.loc[d_ini] = cost_of_trading_fx / float(TR_index.loc[d_ini])
+        interest_return_index.loc[d_ini] = 100.0
+        spot_return_index.loc[d_ini] = 100.0
+        cost_of_settle.loc[d_ini] = 0.0
+        spot_return_index_fx.loc[d_ini] = 100.0
+
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
-            pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            settle_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[tm1, self.currency_list])
+            # pnl = (holdings.loc[tm1] * (df_spots.loc[d] - df_forwards.loc[tm1])).sum()
+            # concept: return of a long forward position
+            # fwd_ask[tm1] = spot_ask[tm1] + fwd_pts_ask[tm1]
+            # total return = holdings[tm1] * (spot_bid[d] - fwd_ask[tm1])
+            # interest return = holdings[tm1] * (spot_ask[tm1] - fwd_ask[tm1])  or  holdings[tm1] * (0 - fwd_pts_ask[tm1])
+            # spot return = holdings[tm1] * (spot_bid[d] - spot_ask[tm1])
+
+            pnl = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list])).sum() # pnl in units of USD
+            pnl_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_forward.loc[tm1, self.currency_list]))
+            pnl_fx_pct.loc[d, self.currency_list] = pnl_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            interest_return_fx = (holdings.loc[tm1, self.currency_list] * (traded_spot.loc[tm1, self.currency_list] - traded_forward.loc[tm1, self.currency_list])) # pnl in units of USD
+            interest_return_index.loc[d] = interest_return_index.loc[tm1] + interest_return_fx.sum() # pnl in units of USD
+            interest_return_fx_pct.loc[d] = interest_return_fx / float(TR_index.loc[tm1]) # pnl in %, for each FX
+            spot_return_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - traded_spot.loc[tm1, self.currency_list]))  # pnl in units of USD
+            spot_return_index.loc[d] = spot_return_index.loc[tm1] + spot_return_fx.sum()
+            spot_return_index_fx.loc[d] = spot_return_index_fx.loc[tm1] + spot_return_fx.loc[self.currency_list]
+            spot_return_fx_pct.loc[d] = spot_return_fx.loc[self.currency_list] / float(TR_index.loc[tm1])
+            cost_of_settle_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - self.spot_last_XXXUSD.loc[d, self.currency_list])).multiply(-1)
+            cost_of_settle.loc[d] = cost_of_settle.loc[tm1] + cost_of_settle_fx.sum() # in units of USD (cost is positive)
+            cost_of_settle_fx_pct.loc[d] = cost_of_settle_fx / float(TR_index.loc[tm1])  # pnl in %
+
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
             dm1 = d - BDay(1)
-            # Adding 1 day delay in weights and signals used for trading
-            holdings.loc[d] = (TR_index.loc[d].values * weights.loc[dm1] / df_forwards.loc[d])
+            # Adding 1 day delay to weights and signals used for trading
             weights_used.loc[d, self.currency_list] = weights.loc[dm1, self.currency_list]
             signals_used.loc[d, self.currency_list] = signals.loc[dm1, self.currency_list]
-        return TR_index, holdings, weights_used, signals_used
+            traded_forward.loc[d, self.currency_list] = self.fwd_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list])
+            traded_spot.loc[d, self.currency_list] = self.spot_pricer(trade_date=d, df_trading_side=weights_used.loc[d, self.currency_list].multiply(-1))  # Get spot quote for the same side as forward (used in spot return)
+            holdings.loc[d] = (TR_index.loc[d].values * weights_used.loc[d] / traded_forward.loc[d])
+
+            cost_of_trading_fx = holdings.loc[d, self.currency_list] * self.fwd_last_XXXUSD.loc[d, self.currency_list] - weights_used.loc[d, self.currency_list] * TR_index.loc[d]
+            cost_index.loc[d] = cost_index.loc[tm1] + cost_of_settle_fx.sum() + cost_of_trading_fx.sum() # cost is positive (for comparative reason, eg. plotting with TR_index)
+            cost_pct.loc[d] = (cost_index.loc[d] - cost_index.loc[tm1]) / TR_index.loc[d]
+            cost_index_fx.loc[d, self.currency_list] = cost_index_fx.loc[tm1, self.currency_list] + cost_of_settle_fx.loc[self.currency_list] + cost_of_trading_fx.loc[self.currency_list]
+            cost_fx_pct.loc[d] = (cost_of_trading_fx + cost_of_settle_fx)/ float(TR_index.loc[d])
+
+        return TR_index, holdings, weights_used, signals_used, interest_return_index, spot_return_index, cost_index, pnl_fx_pct, interest_return_fx_pct, spot_return_fx_pct, cost_fx_pct
 
     def run_equal_vol_monthly_strategy(self, df_signals, target_vol=0.06, strategy_n=0):
         """
@@ -887,19 +1349,34 @@ class CurvyTrade:
 
         # TR_df
         TR_df_equal_vol = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        IR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        SR_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
+        Cost_df = pd.DataFrame(data=None, index=self.monthly_calendar, columns=self.k_list)
         # holdings_df, weights_df, long_short_signals_df
         iterables_k = [self.k_list, self.monthly_calendar]
         idx = pd.MultiIndex.from_product(iterables=iterables_k)
         holdings_df_equal_vol = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         weights_df_equal_vol = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
         long_short_signals_df_equal_vol = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        pct_pnl_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_IR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_SR_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+        Pct_Cost_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
 
         for k in self.k_range:
-            [TR_index_ev_k, holdings_ev_k, weights_ev_k, signals_ev_k] = self._run_equal_vol_monthly_strategy(self.fwd_last_XXXUSD, self.spot_last_XXXUSD, df_ranking, self.vols, target_vol, k=k)
+            [TR_index_ev_k, holdings_ev_k, weights_ev_k, signals_ev_k, IR_index_k, SR_index_k, Cost_index_k, Pct_pnlFX_k, Pct_IR_fx_k, Pct_SR_fx_k, Pct_Cost_fx_k] = \
+                self._run_equal_vol_monthly_strategy(df_ranking=df_ranking, df_vol=self.vols, target_vol=target_vol, k=k)
             TR_df_equal_vol['k' + str(k)] = TR_index_ev_k
             holdings_df_equal_vol.loc['k' + str(k)] = holdings_ev_k.values
             weights_df_equal_vol.loc['k' + str(k)] = weights_ev_k.values
             long_short_signals_df_equal_vol.loc['k' + str(k)] = signals_ev_k.values
+            IR_df['k' + str(k)] = IR_index_k
+            SR_df['k' + str(k)] = SR_index_k
+            Cost_df['k' + str(k)] = Cost_index_k
+            pct_pnl_fx_df.loc['k' + str(k)] = Pct_pnlFX_k.values
+            Pct_IR_fx_df.loc['k' + str(k)] = Pct_IR_fx_k.values
+            Pct_SR_fx_df.loc['k' + str(k)] = Pct_SR_fx_k.values
+            Pct_Cost_fx_df.loc['k' + str(k)] = Pct_Cost_fx_k.values
 
         #Write results in 'data' folder as Excel file. File will be name according with strategy number
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
@@ -907,8 +1384,15 @@ class CurvyTrade:
         holdings_df_equal_vol.to_excel(name_start + 'Holdings.xlsx')
         weights_df_equal_vol.to_excel(name_start + 'Weights.xlsx')
         long_short_signals_df_equal_vol.to_excel(name_start + 'LS_Signals.xlsx')
+        IR_df.to_excel(name_start + 'IR.xlsx') # interest return
+        SR_df.to_excel(name_start + 'SR.xlsx') # spot return
+        Cost_df.to_excel(name_start + 'Cost.xlsx')  # Cost index
+        pct_pnl_fx_df.to_excel(name_start + 'PctPnlFX.xlsx')  # total return by fx
+        Pct_IR_fx_df.to_excel(name_start + 'PctIRFX.xlsx')  # Interest return by fx
+        Pct_SR_fx_df.to_excel(name_start + 'PctSRFX.xlsx')  # spot return by fx
+        Pct_Cost_fx_k.to_excel(name_start + 'PctCostFX.xlsx')  # Cost by fx
 
-        return TR_df_equal_vol, holdings_df_equal_vol, weights_df_equal_vol, long_short_signals_df_equal_vol
+        return TR_df_equal_vol, holdings_df_equal_vol, weights_df_equal_vol, long_short_signals_df_equal_vol, IR_df, SR_df, Cost_df, pct_pnl_fx_df, Pct_IR_fx_df, Pct_SR_fx_df, Pct_Cost_fx_k
 
     def plot_equal_vol_strategy_return(self, chart_title, figure_size, log_y=True):
         self.TR_df_equal_vol.plot(figsize=figure_size, title=chart_title, logy=log_y)
@@ -923,6 +1407,7 @@ class CurvyTrade:
                      'CAD': 'YCSW0004 Index',
                      'CHF': 'YCSW0021 Index',
                      'DEM': 'YCGT0054 Index',
+                     'EUR': 'YCGT0054 Index',
                      'GBP': 'YCSW0022 Index',
                      'JPY': 'YCSW0013 Index',
                      'NOK': 'YCSW0016 Index',
@@ -1604,15 +2089,31 @@ class CurvyTrade:
             df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
             df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
             df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
+            df_excel_ir         = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr         = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost       = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx      = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0,1])
+            df_excel_irfx       = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0,1])
+            df_excel_srfx       = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0,1])
+            df_excel_costfx     = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0,1])
             dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
             self.TR_df_09                    = df_excel_tr
             self.holdings_df_09              = df_excel_holdings
             self.weights_df_09               = df_excel_weights
             self.long_short_signals_df_09    = df_excel_ls_signals
+            self.ir_09                       = df_excel_ir
+            self.sr_09                       = df_excel_sr
+            self.cost_09                     = df_excel_cost
+            self.pct_pnlfx_09                = df_excel_pnlfx
+            self.pct_irfx_09                 = df_excel_irfx
+            self.pct_srfx_09                 = df_excel_srfx
+            self.pct_costfx_09               = df_excel_costfx
             self.TR_df_daily_09              = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_09, self.holdings_df_09, self.weights_df_09, self.long_short_signals_df_09] = self.run_default_monthly_strategy_double_sorting(df_signals1=self.fwd_discount_last, df_signals2=self.relative_curvature, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
+            [self.TR_df_09, self.holdings_df_09, self.weights_df_09, self.long_short_signals_df_09, self.ir_09, self.sr_09,
+             self.cost_09, self.pct_pnlfx_09, self.pct_irfx_09, self.pct_srfx_09, self.pct_costfx_09] = \
+                self.run_default_monthly_strategy_double_sorting(df_signals1=self.fwd_discount_last, df_signals2=self.relative_curvature, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
             self.TR_df_daily_09 = self.run_daily_pnl(self.holdings_df_09, strategy_n)
         print(strategy_name + ' OK - ', time.time() - time_start, ' seconds')
 
@@ -1624,19 +2125,35 @@ class CurvyTrade:
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
         try:
             # Try to read results from Excel files, otherwise run and write to Excel
-            df_excel_tr         = pd.read_excel(name_start + 'TR.xlsx')
-            df_excel_holdings   = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0,1])
-            df_excel_weights    = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0,1])
-            df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0,1])
-            dt_excel_daily_pnl  = pd.read_excel(name_start + 'TR_Daily.xlsx')
-            self.TR_df_10                    = df_excel_tr
-            self.holdings_df_10              = df_excel_holdings
-            self.weights_df_10               = df_excel_weights
-            self.long_short_signals_df_10    = df_excel_ls_signals
-            self.TR_df_daily_10              = dt_excel_daily_pnl
+            df_excel_tr = pd.read_excel(name_start + 'TR.xlsx')
+            df_excel_holdings = pd.read_excel(name_start + 'Holdings.xlsx', index_col=[0, 1])
+            df_excel_weights = pd.read_excel(name_start + 'Weights.xlsx', index_col=[0, 1])
+            df_excel_ls_signals = pd.read_excel(name_start + 'LS_Signals.xlsx', index_col=[0, 1])
+            df_excel_ir = pd.read_excel(name_start + 'IR.xlsx')
+            df_excel_sr = pd.read_excel(name_start + 'SR.xlsx')
+            df_excel_cost = pd.read_excel(name_start + 'Cost.xlsx')
+            df_excel_pnlfx = pd.read_excel(name_start + 'PctPnlFX.xlsx', index_col=[0, 1])
+            df_excel_irfx = pd.read_excel(name_start + 'PctIRFX.xlsx', index_col=[0, 1])
+            df_excel_srfx = pd.read_excel(name_start + 'PctSRFX.xlsx', index_col=[0, 1])
+            df_excel_costfx = pd.read_excel(name_start + 'PctCostFX.xlsx', index_col=[0, 1])
+            dt_excel_daily_pnl = pd.read_excel(name_start + 'TR_Daily.xlsx')
+            self.TR_df_10 = df_excel_tr
+            self.holdings_df_10 = df_excel_holdings
+            self.weights_df_10 = df_excel_weights
+            self.long_short_signals_df_10 = df_excel_ls_signals
+            self.ir_10 = df_excel_ir
+            self.sr_10 = df_excel_sr
+            self.cost_10 = df_excel_cost
+            self.pct_pnlfx_10 = df_excel_pnlfx
+            self.pct_irfx_10 = df_excel_irfx
+            self.pct_srfx_10 = df_excel_srfx
+            self.pct_costfx_10 = df_excel_costfx
+            self.TR_df_daily_10 = dt_excel_daily_pnl
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
-            [self.TR_df_10, self.holdings_df_10, self.weights_df_10, self.long_short_signals_df_10] = self.run_default_monthly_strategy_double_sorting(df_signals1=self.relative_curvature, df_signals2=self.fwd_discount_last, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
+            [self.TR_df_10, self.holdings_df_10, self.weights_df_10, self.long_short_signals_df_10, self.ir_10, self.sr_10,
+             self.cost_10, self.pct_pnlfx_10, self.pct_irfx_10, self.pct_srfx_10, self.pct_costfx_10] = \
+                self.run_default_monthly_strategy_double_sorting(df_signals1=self.relative_curvature, df_signals2=self.fwd_discount_last, func_weight=self._ranking_to_wgt_double_sorting, strategy_n=strategy_n, groups=self.double_sorting_groups, subgroups=self.double_sorting_subgroups)
             self.TR_df_daily_10 = self.run_daily_pnl(self.holdings_df_10, strategy_n)
         print(strategy_name + ' OK - ', time.time() - time_start, ' seconds')
 
