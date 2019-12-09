@@ -53,8 +53,8 @@ class CurvyTrade:
 
     # tickers, start date, end date
     bbg_field_last = ['PX_LAST']
-    bbg_field_bid = ['PX_BID']
-    bbg_field_ask = ['PX_ASK']
+    bbg_field_bid = ['PX_LAST']
+    bbg_field_ask = ['PX_LAST']
     bbg_periodicity_spot = 'DAILY'
     bbg_periodicity_interest_curve = 'DAILY'
     # ini_date_bbg = '19890101'  # extended period for vol calculation
@@ -81,7 +81,44 @@ class CurvyTrade:
                 '3M BGN Curncy': 91.0,
                 '4M BGN Curncy': 121.0,
                 '5M BGN Curncy': 151.0,
-                '6M BGN Curncy': 181.0}
+                '6M BGN Curncy': 181.0,
+                '1W CMPN Curncy': 7.0,
+                '2W CMPN Curncy': 14.0,
+                '3W CMPN Curncy': 21.0,
+                '1M CMPN Curncy': 31.0,
+                '2M CMPN Curncy': 61.0,
+                '3M CMPN Curncy': 91.0,
+                '4M CMPN Curncy': 121.0,
+                '5M CMPN Curncy': 151.0,
+                '6M CMPN Curncy': 181.0
+                }
+
+    dict_fwdpts_source =  {'AUD': 'BGN',
+                           'CAD': 'BGN',
+                           'CHF': 'BGN',
+                           'DEM': 'CMPN',
+                           'EUR': 'BGN',
+                           'GBP': 'BGN',
+                           'JPY': 'BGN',
+                           'NOK': 'BGN',
+                           'NZD': 'BGN',
+                           'SEK': 'BGN',
+                           'BRL': 'BGN',
+                           'CLP': 'BGN',
+                           'COP': 'BGN',
+                           'MXN': 'BGN',
+                           'CZK': 'BGN',
+                           'HUF': 'BGN',
+                           'PLN': 'BGN',
+                           'TRY': 'BGN',
+                           'RUB': 'BGN',
+                           'INR': 'BGN',
+                           'HKD': 'BGN',
+                           'KRW': 'BGN',
+                           'PHP': 'BGN',
+                           'SGD': 'BGN',
+                           'TWD': 'BGN',
+                           'ZAR': 'BGN'}
 
     dict_FX_NDF = {'AUD': 'AUD',
                    'CAD': 'CAD',
@@ -175,8 +212,14 @@ class CurvyTrade:
             # Try to read spot_last.xlsx, otherwise get from BBG and write to Excel
             df_spot_last = pd.read_excel(self.data_folder + '\\' + 'spot_last.xlsx')
             self.spot_last = df_spot_last
+            # Adjusting DEM and EUR
+            self.spot_last.loc['1998-12':]['DEM'] = np.NaN
+            self.spot_last.loc[:'1998-12']['EUR'] = np.NaN
         except FileNotFoundError:
             self.spot_last = self._get_spot_data(self.bbg_field_last)
+            # Adjusting DEM and EUR
+            self.spot_last.loc['1998-12':]['DEM'] = np.NaN
+            self.spot_last.loc[:'1998-12']['EUR'] = np.NaN
             self.spot_last.to_excel(self.data_folder + '\\' + 'spot_last.xlsx')
         print('spot_last OK - ', time.time() - time_start, ' seconds')
         # Bid and Ask of spot price
@@ -200,8 +243,14 @@ class CurvyTrade:
             # Try to read fwdpts_last.xlsx, otherwise get from BBG and write to Excel
             df_fwdpts_last = pd.read_excel(self.data_folder + '\\' + 'fwdpts_last.xlsx')
             self.fwdpts_last = df_fwdpts_last
+            # Adjusting DEM and EUR
+            self.fwdpts_last.loc['1998-12':]['DEM'] = np.NaN
+            self.fwdpts_last.loc[:'1998-12']['EUR'] = np.NaN
         except FileNotFoundError:
             self.fwdpts_last = self._get_fwdpts_data(self.bbg_field_last)
+            # Adjusting DEM and EUR
+            self.fwdpts_last.loc['1998-12':]['DEM'] = np.NaN
+            self.fwdpts_last.loc[:'1998-12']['EUR'] = np.NaN
             self.fwdpts_last.to_excel(self.data_folder + '\\' + 'fwdpts_last.xlsx')
         print('fwdpts_last OK - ', time.time() - time_start, ' seconds')
         # Fwd points bid and ask
@@ -297,18 +346,27 @@ class CurvyTrade:
 
     def run_constructor_in_parts5(self):
         time_start = time.time()
-        self.curvature_all_tenors = self._get_df_specific_beta(df_betas=self.nsiegel_betas_all_tenors, beta='b3')
+        # self.curvature_all_tenors = self._get_df_specific_beta(df_betas=self.nsiegel_betas_all_tenors, beta='b3')
         self.curvature_from_three_month_tenor = self._get_df_specific_beta(df_betas=self.nsiegel_betas_3month, beta='b3')
         self.level_from_three_month_tenor = self._get_df_specific_beta(df_betas=self.nsiegel_betas_3month, beta='b1')
         self.slope_from_three_month_tenor = self._get_df_specific_beta(df_betas=self.nsiegel_betas_3month, beta='b2')
         print('betas OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
         self.relative_level = self._relative_level()  # signal relative level (N-Siegel)
+        # Adjusting DEM and EUR
+        self.relative_level.loc['1998-12':]['DEM'] = np.NaN
+        self.relative_level.loc[:'1998-12']['EUR'] = np.NaN
         print('relative level OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
         self.relative_slope = self._relative_slope()  # signal relative slope (N-Siegel)
+        # Adjusting DEM and EUR
+        self.relative_slope.loc['1998-12':]['DEM'] = np.NaN
+        self.relative_slope.loc[:'1998-12']['EUR'] = np.NaN
         self.relative_curvature = self._relative_curvature() # signal relative curvature (N-Siegel)
-        self.stdev_curvature = self.standard_deviation_curvature()
+        # Adjusting DEM and EUR
+        self.relative_curvature.loc['1998-12':]['DEM'] = np.NaN
+        self.relative_curvature.loc[:'1998-12']['EUR'] = np.NaN
+        # self.stdev_curvature = self.standard_deviation_curvature()
         try:
             # Try to read daily_fwdpts.xlsx, otherwise get from BBG and write to Excel
             df_daily_fwdpts = pd.read_excel(self.data_folder + '\\' + 'daily_fwdpts.xlsx', index_col=[0,1])
@@ -405,7 +463,7 @@ class CurvyTrade:
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
             [self.TR_df_01, self.holdings_df_01, self.weights_df_01, self.long_short_signals_df_01, self.ir_01, self.sr_01,
-             self.cost_01, self.pct_pnlfx_01, self.pct_irfx_01, self.pct_srfx_01, self.pct_costfx_01] = \
+             self.cost_01, self.pct_pnlfx_01, self.pct_irfx_01, self.pct_srfx_01, self.pct_costfx_01, self.blotter_01] = \
                 self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_01 = self.run_daily_pnl(self.holdings_df_01, strategy_n)
         print('Carry trade OK - ', time.time() - time_start, ' seconds')
@@ -445,7 +503,7 @@ class CurvyTrade:
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
             [self.TR_df_02, self.holdings_df_02, self.weights_df_02, self.long_short_signals_df_02, self.ir_02, self.sr_02,
-             self.cost_02, self.pct_pnlfx_02, self.pct_irfx_02, self.pct_srfx_02, self.pct_costfx_02] = \
+             self.cost_02, self.pct_pnlfx_02, self.pct_irfx_02, self.pct_srfx_02, self.pct_costfx_02, self.blotter_02] = \
                 self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_02 = self.run_daily_pnl(self.holdings_df_02, strategy_n)
         print('Curvy trade OK - ', time.time() - time_start, ' seconds')
@@ -485,7 +543,7 @@ class CurvyTrade:
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
             [self.TR_df_03, self.holdings_df_03, self.weights_df_03, self.long_short_signals_df_03, self.ir_03, self.sr_03,
-             self.cost_03, self.pct_pnlfx_03, self.pct_irfx_03, self.pct_srfx_03, self.pct_costfx_03] = \
+             self.cost_03, self.pct_pnlfx_03, self.pct_irfx_03, self.pct_srfx_03, self.pct_costfx_03, self.blotter_03] = \
                 self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_03 = self.run_daily_pnl(self.holdings_df_03, strategy_n)
         print('Level trade OK - ', time.time() - time_start, ' seconds')
@@ -525,7 +583,7 @@ class CurvyTrade:
         except FileNotFoundError:
             # this function already writes results do excel (just need strategy_n): self.run_equal_vol_monthly_strategy
             [self.TR_df_04, self.holdings_df_04, self.weights_df_04, self.long_short_signals_df_04, self.ir_04, self.sr_04,
-             self.cost_04, self.pct_pnlfx_04, self.pct_irfx_04, self.pct_srfx_04, self.pct_costfx_04] = \
+             self.cost_04, self.pct_pnlfx_04, self.pct_irfx_04, self.pct_srfx_04, self.pct_costfx_04, self.blotter_04] = \
                 self.run_default_monthly_strategy(df_signals=strategy_criteria, func_weight=self._ranking_to_wgt, strategy_n=strategy_n)
             self.TR_df_daily_04 = self.run_daily_pnl(self.holdings_df_04, strategy_n)
         print('Slope trade OK - ', time.time() - time_start, ' seconds')
@@ -737,15 +795,15 @@ class CurvyTrade:
         df_inverse.loc[df_inverse['value'] == "N", 'value'] = -1
         df_tickers['inverse'] = df_inverse['value']
         # Forward curve tickers
-        df_tickers['1w'] = [self.dict_FX_NDF[c] + '1W BGN Curncy' for c in self.currency_list]
-        df_tickers['2w'] = [self.dict_FX_NDF[c] + '2W BGN Curncy' for c in self.currency_list]
-        df_tickers['3w'] = [self.dict_FX_NDF[c] + '3W BGN Curncy' for c in self.currency_list]
-        df_tickers['1m'] = [self.dict_FX_NDF[c] + '1M BGN Curncy' for c in self.currency_list]
-        df_tickers['2m'] = [self.dict_FX_NDF[c] + '2M BGN Curncy' for c in self.currency_list]
-        df_tickers['3m'] = [self.dict_FX_NDF[c] + '3M BGN Curncy' for c in self.currency_list]
-        df_tickers['4m'] = [self.dict_FX_NDF[c] + '4M BGN Curncy' for c in self.currency_list]
-        df_tickers['5m'] = [self.dict_FX_NDF[c] + '5M BGN Curncy' for c in self.currency_list]
-        df_tickers['6m'] = [self.dict_FX_NDF[c] + '6M BGN Curncy' for c in self.currency_list]
+        df_tickers['1w'] = [self.dict_FX_NDF[c] + '1W ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['2w'] = [self.dict_FX_NDF[c] + '2W ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['3w'] = [self.dict_FX_NDF[c] + '3W ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['1m'] = [self.dict_FX_NDF[c] + '1M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['2m'] = [self.dict_FX_NDF[c] + '2M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['3m'] = [self.dict_FX_NDF[c] + '3M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['4m'] = [self.dict_FX_NDF[c] + '4M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['5m'] = [self.dict_FX_NDF[c] + '5M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
+        df_tickers['6m'] = [self.dict_FX_NDF[c] + '6M ' + self.dict_fwdpts_source[c] + ' Curncy' for c in self.currency_list]
         return df_tickers
 
     def _get_spot_data(self, bbg_field=['PX_LAST']):
@@ -949,6 +1007,16 @@ class CurvyTrade:
         spot_return_index = pd.DataFrame(index=self.monthly_calendar, columns=['index'])
         spot_return_index_fx = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
         spot_return_fx_pct = pd.DataFrame(index=self.monthly_calendar, columns=self.currency_list)
+        # build a trade blotter
+        lst_blotter_columns = ['trade_dt', 'maturity', 'holding', 'fx', 'traded_px', 'eval_date', 'price_mtm', 'pnl']
+        blotter_df = pd.DataFrame(data=None, columns=lst_blotter_columns)
+        def _build_ticket_dict(t_trade_dt, t_maturity, t_holding, t_fx, t_traded_px):
+            t_eval_dt = t_trade_dt
+            t_price_mtm = t_traded_px
+            t_pnl = 0.0
+            t_values = [t_trade_dt, t_maturity, t_holding, t_fx, t_traded_px, t_eval_dt, t_price_mtm, t_pnl]
+            dict_ticket = dict(zip(lst_blotter_columns, t_values))
+            return dict_ticket
 
         d_ini = self.monthly_calendar[0]
         TR_index.loc[d_ini] = 100.0
@@ -969,6 +1037,12 @@ class CurvyTrade:
         spot_return_index.loc[d_ini] = 100.0
         cost_of_settle.loc[d_ini] = 0.0
         spot_return_index_fx.loc[d_ini] = 100.0
+        # writting trades into blotter
+        for curncy in self.currency_list:
+            curncy_holding = holdings.loc[d_ini, curncy]
+            if (curncy_holding > 0.0 or curncy_holding < 0.0):
+                trade_ticket_dict = _build_ticket_dict(t_trade_dt=d_ini, t_maturity=self.monthly_calendar[1], t_holding=curncy_holding, t_fx=curncy, t_traded_px=traded_forward.loc[d_ini, curncy])
+                blotter_df = blotter_df.append(trade_ticket_dict, ignore_index=True)
 
         # tm1: t minus 1
         for d, tm1 in zip(self.monthly_calendar[1:], self.monthly_calendar[:-1]):
@@ -993,6 +1067,17 @@ class CurvyTrade:
             cost_of_settle_fx = (holdings.loc[tm1, self.currency_list] * (settle_spot.loc[d, self.currency_list] - self.spot_last_XXXUSD.loc[d, self.currency_list])).multiply(-1)
             cost_of_settle.loc[d] = cost_of_settle.loc[tm1] + cost_of_settle_fx.sum() # in units of USD (cost is positive)
             cost_of_settle_fx_pct.loc[d] = cost_of_settle_fx / float(TR_index.loc[tm1])  # pnl in %
+            # writting trades into blotter
+            # settlement trades
+            for curncy in self.currency_list:
+                curncy_holding = holdings.loc[tm1, curncy]
+                if (curncy_holding > 0.0 or curncy_holding < 0.0):
+                    trade_ticket_dict = _build_ticket_dict(t_trade_dt=d,
+                                                           t_maturity=d,
+                                                           t_holding=curncy_holding * -1.0,
+                                                           t_fx=curncy,
+                                                           t_traded_px=settle_spot.loc[d, curncy])
+                    blotter_df = blotter_df.append(trade_ticket_dict, ignore_index=True)
 
             TR_index.loc[d] = TR_index.loc[tm1] + pnl
             dm1 = d - BDay(1)
@@ -1009,7 +1094,19 @@ class CurvyTrade:
             cost_index_fx.loc[d, self.currency_list] = cost_index_fx.loc[tm1, self.currency_list] + cost_of_settle_fx.loc[self.currency_list] + cost_of_trading_fx.loc[self.currency_list]
             cost_fx_pct.loc[d] = (cost_of_trading_fx + cost_of_settle_fx)/ float(TR_index.loc[d])
 
-        return TR_index, holdings, weights_used, signals_used, interest_return_index, spot_return_index, cost_index, pnl_fx_pct, interest_return_fx_pct, spot_return_fx_pct, cost_fx_pct
+            # writting trades into blotter
+            # new forward trades
+            for curncy in self.currency_list:
+                curncy_holding = holdings.loc[d, curncy]
+                if (curncy_holding > 0.0 or curncy_holding < 0.0):
+                    trade_ticket_dict = _build_ticket_dict(t_trade_dt=d,
+                                                           t_maturity=d + BMonthEnd(1),
+                                                           t_holding=curncy_holding,
+                                                           t_fx=curncy,
+                                                           t_traded_px=traded_forward.loc[d, curncy])
+                    blotter_df = blotter_df.append(trade_ticket_dict, ignore_index=True)
+
+        return TR_index, holdings, weights_used, signals_used, interest_return_index, spot_return_index, cost_index, pnl_fx_pct, interest_return_fx_pct, spot_return_fx_pct, cost_fx_pct, blotter_df
 
     def fwd_pricer(self, trade_date, df_trading_side):
         traded_fwd_price = pd.Series(data=None, index=df_trading_side.index)
@@ -1140,7 +1237,7 @@ class CurvyTrade:
         Pct_Cost_fx_df = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
 
         for k in self.k_range:
-            [TR_index_k, holdings_k, weights_k, signals_k, IR_index_k, SR_index_k, Cost_index_k, Pct_pnlFX_k, Pct_IR_fx_k, Pct_SR_fx_k, Pct_Cost_fx_k] = \
+            [TR_index_k, holdings_k, weights_k, signals_k, IR_index_k, SR_index_k, Cost_index_k, Pct_pnlFX_k, Pct_IR_fx_k, Pct_SR_fx_k, Pct_Cost_fx_k, Blotter_df] = \
                 self._run_default_monthly_strategy(df_ranking=df_ranking, func_weight=func_weight, k=k)
 
             TR_df['k' + str(k)] = TR_index_k
@@ -1154,6 +1251,12 @@ class CurvyTrade:
             Pct_IR_fx_df.loc['k' + str(k)] = Pct_IR_fx_k.values
             Pct_SR_fx_df.loc['k' + str(k)] = Pct_SR_fx_k.values
             Pct_Cost_fx_df.loc['k' + str(k)] = Pct_Cost_fx_k.values
+            if k == 1:
+                Blotter = Blotter_df.copy(deep=True)
+                Blotter['k'] = 1
+            else:
+                Blotter_df['k'] = k
+                Blotter = Blotter.append(Blotter_df, ignore_index=True)
 
         #Write results in 'data' folder as Excel file. File will be name according with strategy number
         name_start = self.data_folder + "\\" + "{:02}".format(strategy_n) + '_'
@@ -1168,8 +1271,9 @@ class CurvyTrade:
         Pct_IR_fx_df.to_excel(name_start + 'PctIRFX.xlsx')  # Interest return by fx
         Pct_SR_fx_df.to_excel(name_start + 'PctSRFX.xlsx')  # spot return by fx
         Pct_Cost_fx_k.to_excel(name_start + 'PctCostFX.xlsx')  # Cost by fx
+        Blotter.to_excel(name_start + 'Blotter.xlsx')  # Blotter
 
-        return TR_df, holdings_df, weights_df, long_short_signals_df, IR_df, SR_df, Cost_df, pct_pnl_fx_df, Pct_IR_fx_df, Pct_SR_fx_df, Pct_Cost_fx_k
+        return TR_df, holdings_df, weights_df, long_short_signals_df, IR_df, SR_df, Cost_df, pct_pnl_fx_df, Pct_IR_fx_df, Pct_SR_fx_df, Pct_Cost_fx_k, Blotter
 
     def run_default_monthly_strategy_double_sorting(self, df_signals1, df_signals2, func_weight, strategy_n=0, groups=3, subgroups=2):
         """
