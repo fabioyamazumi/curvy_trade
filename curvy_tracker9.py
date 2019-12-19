@@ -1996,6 +1996,34 @@ class CurvyTrade:
                 table03_daily.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
         return table03_daily
 
+    def table_three_monthly_period(self, start='1991', end='2019'):
+        freq = 'Monthly'
+        list_of_strategy_names = list(self.df_strategy['Name'])
+        idx = pd.MultiIndex.from_product(iterables=[list_of_strategy_names, self.k_range], names=['Sorting', 'k'])
+        # idx = pd.MultiIndex.from_product(
+        # iterables=[['Carry trade', 'Carry (EV)', 'Level', 'Level (EV)', 'Slope', 'Slope (EV)', 'Curvature', 'Curvature (EV)'],
+        #        self.k_range],
+        # names=['Sorting', 'k'])
+        column_names = ['Mean annual', 'Stdev annual', 'Skewness monthly', 'Kurtosis monthly', 'Sharpe ratio']
+        dict_columns = {'Mean annual': 'Excess Return',
+                        'Stdev annual': 'Volatility',
+                        'Skewness monthly': 'Skewness',
+                        'Kurtosis monthly': 'Kurtosis',
+                        'Sharpe ratio': 'Sharpe'}
+        dict_mult = {'Excess Return': 100.0,
+                        'Volatility': 100.0,
+                        'Skewness': 1.0,
+                        'Kurtosis': 1.0,
+                        'Sharpe': 1.0}
+        table03_monthly = pd.DataFrame(index=idx, columns=column_names)
+        performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR']).loc[start:end, 'k' + str(k)], freq=freq)[field] * dict_mult[field]
+        for strategy_name in list_of_strategy_names:
+            for column_name in column_names:
+                field = dict_columns[column_name]
+                n = self.df_strategy[self.df_strategy['Name'] == strategy_name].index[0]
+                table03_monthly.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
+        return table03_monthly
+
     def _get_fwdpts_curve_bbg(self, ticker_list_curve=None, ini_date_bbg=None, end_date_bbg=None):
         if ticker_list_curve is None:
             ticker_list_curve = ['AUD2W BGN Curncy',
@@ -2261,3 +2289,114 @@ class CurvyTrade:
             self.TR_df_daily_10 = self.run_daily_pnl(self.holdings_df_10, strategy_n)
         print(strategy_name + ' OK - ', time.time() - time_start, ' seconds')
 
+    def curva_nsiegel(self, Moeda, Data):
+        _betasns = self.nsiegel_betas_3month.loc[(Moeda, Data)]
+        _lambda = 0.0609
+        b1 = _betasns.loc['b1']
+        b2 = _betasns.loc['b2']
+        b3 = _betasns.loc['b3']
+        prazos = list(self.interest_curve.columns)[0:34]
+        _result = pd.DataFrame(data=self.interest_curve.loc[(Moeda, Data)][prazos].values, index=prazos,
+                               columns=['Actual'])
+        _result['NSiegel'] = np.NaN
+        for tau in prazos:
+            _aux = ((1 - math.exp(-_lambda * tau)) / (_lambda * tau))
+            y_tau = b1 + b2 * _aux + b3 * (_aux - math.exp(-_lambda * tau))
+            _result.loc[tau, 'NSiegel'] = y_tau
+        print(b1, b2, b3)
+        return _result
+
+    def curva_nsiegel_given_betas(self, Moeda, Data, b1, b2, b3):
+        _betasns = self.nsiegel_betas_3month.loc[(Moeda, Data)]
+        _lambda = 0.0609
+        prazos = list(self.interest_curve.columns)[0:34]
+        _result = pd.DataFrame(data=self.interest_curve.loc[(Moeda, Data)][prazos].values, index=prazos,
+                               columns=['Actual'])
+        _result['NSiegel'] = np.NaN
+        for tau in prazos:
+            _aux = ((1 - math.exp(-_lambda * tau)) / (_lambda * tau))
+            y_tau = b1 + b2 * _aux + b3 * (_aux - math.exp(-_lambda * tau))
+            _result.loc[tau, 'NSiegel'] = y_tau
+        print(b1, b2, b3)
+        return _result
+
+    def plot_break01(self, strategy_n, k):
+        name_strat = '_' + "{:02}".format(strategy_n)
+        nome_str = self.df_strategy.loc[strategy_n, 'Name']
+        k_str = 'k' + str(k)
+        spot_ret = getattr(self, 'pct_srfx' + name_strat).loc[k_str]
+        ir_ret = getattr(self, 'pct_irfx' + name_strat).loc[k_str]
+        df = pd.DataFrame(data=spot_ret.sum(), columns=['variação spot'])
+        df['juros'] = ir_ret.sum()
+        df.plot(kind='bar', figsize=(12, 8), title=nome_str + '(' + k_str + ')' + ': decomposição dos retornos')
+
+    def plot_pnl(self, strategy_n, k):
+        name_strat = '_' + "{:02}".format(strategy_n)
+        nome_str = self.df_strategy.loc[strategy_n, 'Name']
+        k_str = 'k' + str(k)
+        spot_ret = getattr(self, 'pct_pnlfx' + name_strat).loc[k_str].sum()
+        spot_ret = pd.DataFrame(data=spot_ret, columns=['retornos'])
+        spot_ret.plot(kind='bar', figsize=(12, 8), title=nome_str + '(' + k_str + ')' + ': decomposição por moeda')
+
+    def calculate_daily_pnl(self, dates, df_blotter):
+        if dates == None:
+            dates = list_dates = self.daily_calendar[22:]
+        list_to_do = tqdm(dates)
+        df_blotter['ndays'] = 0
+        df_blotter['k'] = ['k' + str(i) for i in df_blotter['k']]
+        TR_df_daily_new = pd.DataFrame(data=None, index=self.daily_calendar, columns=self.TR_df_daily_01.columns)
+        idx = pd.MultiIndex.from_product(iterables=[list(self.k_list), self.daily_calendar])
+        TR_df_daily_pnl_byfx = pd.DataFrame(data=None, index=idx, columns=self.currency_list)
+
+        for d in list_to_do:
+            # Pnl of not expired trades
+            live_trades = (df_blotter['maturity'] >= d) & (df_blotter['trade_dt'] <= d)
+            time_delta_aux = (df_blotter.loc[live_trades, 'maturity'] - d)
+            df_blotter.loc[live_trades, 'ndays'] = time_delta_aux.astype('timedelta64[D]')
+            df_blotter['eval_date'] = d
+
+            col_fx = df_blotter.loc[live_trades, 'fx']
+            col_ndays = df_blotter.loc[live_trades, 'ndays']
+            col_eval = df_blotter.loc[live_trades, 'eval_date']
+            inputs = zip(col_fx, col_ndays, col_eval)
+            df_blotter.loc[live_trades, 'price_mtm'] = [self.daily_fwds_XXXUSD.loc[(fx, d), ndays] for fx, ndays, d in
+                                                        inputs]
+            df_blotter.loc[live_trades, 'pnl'] = (df_blotter.loc[live_trades, 'price_mtm'] - df_blotter.loc[
+                live_trades, 'traded_px']) * df_blotter.loc[live_trades, 'holding']
+
+            trades_till_now = (df_blotter['trade_dt'] <= d)
+            pnl_accum = \
+            df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date']).sum().loc[(self.k_list, d), 'pnl'].unstack(
+                0).loc[d]
+            # Write Pnl
+            TR_df_daily_new.loc[d, self.k_list] = pnl_accum
+            lst_moedas = df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date', 'fx']).sum()[
+                'pnl'].unstack().columns
+            pnl_acum_fx = df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date', 'fx']).sum()['pnl'].unstack()
+            TR_df_daily_pnl_byfx.loc[(self.k_list, d), lst_moedas] = pnl_acum_fx
+        return TR_df_daily_new, TR_df_daily_pnl_byfx
+
+    def _run_NSiegel_fitting_one_curve(self, FX='AUD', date='2016-04-29', tenors_greater_than_n_years=0.0):
+        # Run Nelson-Siegel fitting only for available dates
+        # calendar_curves = list(self.interest_curve.index.get_level_values(1).unique())
+        idx = pd.MultiIndex.from_product(iterables=[self.currency_list_curve, self.calendar_curves])
+        df_betas = pd.DataFrame(data=np.NaN, index=self.calendar_curves, columns=['b1', 'b2', 'b3'])
+        beta0 = np.ones(3)  # b1, b2 e b3
+
+        d = date
+        currency = FX
+        df_curve_input = self._get_one_curve(currency, d, tenors_greater_than_n_years=tenors_greater_than_n_years)
+        if df_curve_input is None:
+            print(currency, ' ', d, 'ERROR IN THS CURVE')
+        try:
+            res = minimize(fun=self.NSiegel,
+                           x0=beta0,
+                           args=df_curve_input,
+                           method='SLSQP')
+            if res.success:
+                df_betas.loc[d, 'b1'] = res.x[0]
+                df_betas.loc[d, 'b2'] = res.x[1]
+                df_betas.loc[d, 'b3'] = res.x[2]
+        except:
+            print(currency, ' ', d, 'ERROR IN THS CURVE')
+        return df_betas.loc[pd.to_datetime(d)]
