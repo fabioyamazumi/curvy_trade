@@ -291,6 +291,7 @@ class CurvyTrade:
         self.fwd_bid_XXXUSD = self.fwd_bid ** self.ticker_inverse
         self.fwd_ask_XXXUSD = self.fwd_ask ** self.ticker_inverse
         self.fwd_discount_last = (self.spot_last_XXXUSD / self.fwd_last_XXXUSD - 1) * 12 # signal fwd premium
+        self.tradeable_fx = (~np.isnan(self.fwd_discount_last))
         print('fwd_discount_last OK - ', time.time() - time_start, ' seconds')
         time_start = time.time()
         # self.vols = self._ewma_vol(ewma_lambda=0.94) #  discontinued after version 8
@@ -317,6 +318,10 @@ class CurvyTrade:
             self.interest_curve = df_interest_curve
         except FileNotFoundError:
             self.interest_curve = self._get_all_interest_curves()
+            if 'BRL' in self.currency_list:
+                self.BZ_curve_data() # includes Bz curves
+            if 'DE<' in self.currency_list:
+                self.DEM_curve_data() # includes DEM curves
             self.interest_curve.to_excel(self.data_folder + '\\' + 'interest_curve.xlsx')
         print('interest_curve OK - ', time.time() - time_start, ' seconds')
         self.calendar_curves = list(self.interest_curve.index.get_level_values(1).unique()) # available dates (curves)
@@ -342,6 +347,17 @@ class CurvyTrade:
             self.nsiegel_betas_3month = df_nsiegel_betas
         except FileNotFoundError:
             self.nsiegel_betas_3month = self._run_NSiegel_fitting_sequential(tenors_greater_than_n_years=0.25)
+            # filling NaN for BRL series
+            if 'BRL' in self.currency_list:
+                nsiegel_betas_3month_aux = self.nsiegel_betas_3month.loc['BRL'].fillna(method='ffill', limit=3)
+                dates_list = self.nsiegel_betas_3month.loc['BRL'].index
+                for dt in dates_list:
+                    self.nsiegel_betas_3month.loc['BRL', dt] = nsiegel_betas_3month_aux.loc[dt]
+            if 'DEM' in self.currency_list:
+                nsiegel_betas_3month_aux = self.nsiegel_betas_3month.loc['DEM'].fillna(method='ffill', limit=3)
+                dates_list = self.nsiegel_betas_3month.loc['DEM'].index
+                for dt in dates_list:
+                    self.nsiegel_betas_3month.loc['DEM', dt] = nsiegel_betas_3month_aux.loc[dt]
             self.nsiegel_betas_3month.to_excel(self.data_folder + '\\' + 'nsiegel_betas_3month.xlsx')
         print('NS-from 3 month tenor OK - ', time.time() - time_start, ' seconds')
 
@@ -1002,7 +1018,8 @@ class CurvyTrade:
         ranked_matrix = pd.DataFrame(data=np.NaN, index=self.daily_calendar, columns=self.currency_list)
 
         for d in self.daily_calendar:
-            available_FX = list(df_signals.loc[d].dropna(how='any').index)
+            tradeable_FX = self.tradeable_fx.loc[d]
+            available_FX = list(df_signals.loc[d, tradeable_FX].dropna(how='any').index)
             ranked_matrix.loc[d, available_FX] = df_signals.loc[d, available_FX].rank(ascending=True)
         # ranked_matrix.fillna(method='ffill', axis=0, inplace=True)
         # ranked_matrix.dropna(axis=0, how='any', inplace=True)
@@ -1856,7 +1873,7 @@ class CurvyTrade:
         return df_curvature_all_tenors
 
     def _get_df_specific_beta(self, df_betas, beta='b3'):
-        df_betas_result = pd.DataFrame(index=self.interest_curve.index.get_level_values(1).unique(), columns=self.currency_list_curve)
+        df_betas_result = pd.DataFrame(index=self.daily_calendar, columns=self.currency_list_curve)
         for currency in self.currency_list_curve:
             df_betas_result[currency] = df_betas.loc[(currency), beta]
         return df_betas_result
@@ -2103,19 +2120,32 @@ class CurvyTrade:
                         'Skewness monthly': 'Skewness',
                         'Kurtosis monthly': 'Kurtosis',
                         'Sharpe ratio': 'Sharpe'}
-        dict_mult = {'Excess Return': 100.0,
-                        'Volatility': 100.0,
-                        'Skewness': 1.0,
-                        'Kurtosis': 1.0,
-                        'Sharpe': 1.0}
+        # dict_mult = {'Excess Return': 100.0,
+        #                 'Volatility': 100.0,
+        #                 'Skewness': 1.0,
+        #                 'Kurtosis': 1.0,
+        #                 'Sharpe': 1.0}
         table03_daily = pd.DataFrame(index=idx, columns=column_names)
-        performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR_df_daily']).loc[start:end, 'k' + str(k)], freq=freq)[field] * dict_mult[field]
+        # performance_data = lambda k, n, field: self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR_df_daily']).loc[start:end, 'k' + str(k)], freq=freq)[field] * dict_mult[field]
         for strategy_name in list_of_strategy_names:
             for column_name in column_names:
                 field = dict_columns[column_name]
                 n = self.df_strategy[self.df_strategy['Name'] == strategy_name].index[0]
-                table03_daily.loc[(strategy_name,), column_name] = [performance_data(k, n, field) for k in self.k_range]
+                # table03_daily.loc[(strategy_name,), column_name] = [self.performance_data(k, n, field) for k in self.k_range]
+                table03_daily.loc[(strategy_name,), column_name] = [self.performance_data(k, n, field, start, end, freq) for k in self.k_range]
         return table03_daily
+
+    def performance_data(self, k, n, field, start, end, freq):
+        dict_mult = {'Excess Return': 100.0,
+                     'Volatility': 100.0,
+                     'Skewness': 1.0,
+                     'Kurtosis': 1.0,
+                     'Sharpe': 1.0}
+        try:
+            result = self.GetPerformanceTable(getattr(self, self.df_strategy.loc[n, 'TR_df_daily']).loc[start:end, 'k' + str(k)], freq=freq)[field] * dict_mult[field]
+        except:
+            result = np.NaN
+        return result
 
     def table_three_monthly_period(self, start='1991', end='2019'):
         freq = 'Monthly'
@@ -2259,29 +2289,45 @@ class CurvyTrade:
 
     def _run_NSiegel_fitting_sequential(self, tenors_greater_than_n_years=0.0):
         # Run Nelson-Siegel fitting only for available dates
-        idx = pd.MultiIndex.from_product(iterables=[self.currency_list_curve, self.calendar_curves])
+        idx = pd.MultiIndex.from_product(iterables=[self.currency_list_curve, self.daily_calendar])
         df_betas = pd.DataFrame(data=np.NaN, index=idx, columns=['b1', 'b2', 'b3'])
         beta0 = np.ones(3)  # b1, b2 e b3
 
-        combination_list = list(product(self.currency_list_curve, self.calendar_curves))
+        combination_list = list(product(self.currency_list_curve, self.daily_calendar))
+        key_tenors = pd.DataFrame(data=[6.0, 12.0, 24.0, 60.0, 120.0, 180.0],
+                                  index=[6.0, 12.0, 24.0, 60.0, 120.0, 180.0])
 
         def _run_fitting(currency_and_date_tuple):
             d = currency_and_date_tuple[1]
             currency = currency_and_date_tuple[0]
             df_curve_input = self._get_one_curve(currency, str(d), tenors_greater_than_n_years)
-            try:
-                res = minimize(fun=self.NSiegel,
-                           x0=beta0,
-                           args=df_curve_input,
-                           method='SLSQP')
-                if res.success:
-                    df_betas.loc[currency, d] = res.x
-                    return res.x
-            except:
-                print(currency, ' ', d, 'ERROR IN THS CURVE')
-                return beta0 * np.NaN
-                # results = res.x
-                # return results
+            NAN_Value = np.NaN
+            if df_curve_input.empty:
+                df_betas.loc[currency, d] = NAN_Value
+            else:
+                if df_curve_input.count() < 2:
+                    df_betas.loc[currency, d] = NAN_Value
+                else:
+                    # Insert longer tenor for better fitting of level
+                    max_tenor = df_curve_input.index.max()
+                    max_tenor_rate = df_curve_input.loc[max_tenor]
+                    if max_tenor < 240.0:
+                        for tenor in list(key_tenors.loc[key_tenors[0] > max_tenor].index):
+                            df_curve_input.loc[tenor] = max_tenor_rate
+                    try:
+                        res = minimize(fun=self.NSiegel,
+                                   x0=beta0,
+                                   args=df_curve_input,
+                                   method='SLSQP')
+                        if res.success:
+                            df_betas.loc[currency, d] = res.x
+                            # return res.x
+                    except:
+                        # print(currency, ' ', d, 'ERROR IN THS CURVE')
+                        df_betas.loc[currency, d] = NAN_Value
+                        # return beta0 * np.NaN
+                        # results = res.x
+                        # return results
 
         for i in tqdm(combination_list, 'NS-Fitting...'):
             _run_fitting(i)
@@ -2589,8 +2635,9 @@ class CurvyTrade:
             TR_df_daily_new.loc[d, self.k_list] = pnl_accum
             lst_moedas = df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date', 'fx']).sum()[
                 'pnl'].unstack().columns
+            lst_k = list(df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date', 'fx']).sum().index.get_level_values(0).unique())
             pnl_acum_fx = df_blotter.loc[trades_till_now].groupby(by=['k', 'eval_date', 'fx']).sum()['pnl'].unstack()
-            TR_df_daily_pnl_byfx.loc[(self.k_list, d), lst_moedas] = pnl_acum_fx
+            TR_df_daily_pnl_byfx.loc[(lst_k, d), lst_moedas] = pnl_acum_fx
         return TR_df_daily_new, TR_df_daily_pnl_byfx
 
     def _run_NSiegel_fitting_one_curve(self, FX='AUD', date='2016-04-29', tenors_greater_than_n_years=0.0):
@@ -2617,3 +2664,107 @@ class CurvyTrade:
         except:
             print(currency, ' ', d, 'ERROR IN THS CURVE')
         return df_betas.loc[pd.to_datetime(d)]
+
+
+    def BZ_curve_data(self):
+        try:
+            df_bz_bbg_aux = pd.read_excel(self.data_folder + "\\BZ_bbg_aux.xlsx", index_col=0)
+        except FileNotFoundError:
+            # requesting BDS and BDP data
+            member_ticker = list(self.con.bulkref('oda comdty', 'fut chain', ovrds=[("INCLUDE_EXPIRED_CONTRACTS", "Y")])['value'])
+            aux_tickers_df = self.con.ref(member_ticker, 'FUT_DLV_DT_FIRST').set_index(keys='value', drop=False)
+            aux_tickers_df.index = pd.to_datetime(aux_tickers_df.value)
+            aux_tickers_df.value = pd.to_datetime(aux_tickers_df.value)
+            # requesting BDH data
+            df_bz_bbg = self.con.bdh(member_ticker, self.bbg_field_last, self.ini_date_bbg, self.end_date_bbg)
+            # excel backup
+            df_bz_bbg.to_excel(self.data_folder + "\\BZ_bbg.xlsx")
+            df_bz_bbg.columns = df_bz_bbg.columns.droplevel(level='field')
+            ticker_expire_dict = dict(zip(aux_tickers_df['ticker'].values, aux_tickers_df['ticker'].index))
+            df_bz_bbg.columns = [ticker_expire_dict[x] for x in df_bz_bbg.columns]
+            df_bz_bbg_aux = df_bz_bbg.reindex(sorted(df_bz_bbg.columns), axis=1)
+            # excel backup
+            df_bz_bbg_aux.to_excel(self.data_folder + "\\BZ_bbg_aux.xlsx")
+
+        # cleaning previous data after getting BBG data
+        self.interest_curve.loc['BRL'] = np.NaN
+        # list_of_all_tenors = [self.tenor_dict[x] * 12 for x in self.tenor_dict]
+        list_of_all_tenors = self.interest_curve.columns
+        list_of_all_tenors_aux = pd.Series(data=list_of_all_tenors, index=list_of_all_tenors)
+        # calendar_list = self.daily_calendar[self.daily_calendar > '1996-01-02']
+        calendar_list = df_bz_bbg_aux.index[df_bz_bbg_aux.index > '1996-01-02']
+        for dt in tqdm(calendar_list):
+            curve_series_aux = df_bz_bbg_aux.loc[dt].dropna()
+            time_deta_aux = (curve_series_aux.index - dt)
+            curve_series_aux.index = time_deta_aux.astype('timedelta64[D]') / 365 * 12
+            max_tenor_origin = curve_series_aux.index.max()
+            min_tenor_origin = curve_series_aux.index.min()
+            max_tenor_destination = list_of_all_tenors_aux.loc[list_of_all_tenors_aux >= max_tenor_origin].min()
+            tenors_to_fill = list_of_all_tenors_aux[((list_of_all_tenors_aux > 1/30) & (list_of_all_tenors_aux <= max_tenor_destination))].index
+            rates_to_fill = pd.Series(data=None, index=tenors_to_fill)
+            rates_to_fill[rates_to_fill.index < min_tenor_origin] = curve_series_aux.iloc[0]
+            rates_to_fill_aux = pd.DataFrame(rates_to_fill.append(curve_series_aux), columns=['rate'])
+            rates_to_fill_aux = rates_to_fill_aux.loc[~rates_to_fill_aux.index.duplicated(keep='last')].rate
+            rates_to_fill_aux.sort_index(axis=0, inplace=True)
+            rates_to_fill_aux.interpolate(method='index', axis=0, inplace=True)
+            rates_to_fill = rates_to_fill_aux.loc[rates_to_fill.index]
+            # Write values in self.interest_curve (adjusting only BRL curves)
+            for tenor_month in rates_to_fill.index:
+                self.interest_curve.loc[('BRL', dt), tenor_month] = rates_to_fill.loc[tenor_month]
+
+    def DEM_curve_data(self):
+        try:
+            df_bz_bbg_aux = pd.read_excel(self.data_folder + "\\DEM_bbg_aux.xlsx", index_col=0)
+        except FileNotFoundError:
+            # requesting BDS and BDP data
+            member_ticker = ['FD0003M Index','GTDEM2Y Govt','GTDEM3Y Govt','GTDEM4Y Govt','GTDEM5Y Govt','GTDEM7Y Govt','GTDEM10Y Govt','GTDEM15Y Govt','GTDEM20Y Govt','GTDEM30Y Govt']
+            # aux_tickers_df = self.con.ref(member_ticker, 'FUT_DLV_DT_FIRST').set_index(keys='value', drop=False)
+            # aux_tickers_df.index = pd.to_datetime(aux_tickers_df.value)
+            # aux_tickers_df.value = pd.to_datetime(aux_tickers_df.value)
+            ticker_expire_dict = {'FD0003M Index': 3.0,
+                                  'GTDEM2Y Govt': 24.0,
+                                  'GTDEM3Y Govt': 36.0,
+                                  'GTDEM4Y Govt': 48.0,
+                                  'GTDEM5Y Govt': 60.0,
+                                  'GTDEM7Y Govt': 84.0,
+                                  'GTDEM10Y Govt': 120.0,
+                                  'GTDEM15Y Govt': 180.0,
+                                  'GTDEM20Y Govt': 240.0,
+                                  'GTDEM30Y Govt': 360.0}
+            # requesting BDH data
+            df_bz_bbg = self.con.bdh(member_ticker, self.bbg_field_last, self.ini_date_bbg, self.end_date_bbg)
+            # excel backup
+            df_bz_bbg.to_excel(self.data_folder + "\\DEM_bbg.xlsx")
+            df_bz_bbg.columns = df_bz_bbg.columns.droplevel(level='field')
+            # ticker_expire_dict = dict(zip(aux_tickers_df['ticker'].values, aux_tickers_df['ticker'].index))
+            df_bz_bbg.columns = [ticker_expire_dict[x] for x in df_bz_bbg.columns]
+            df_bz_bbg_aux = df_bz_bbg.reindex(sorted(df_bz_bbg.columns), axis=1)
+            # excel backup
+            df_bz_bbg_aux.to_excel(self.data_folder + "\\DEM_bbg_aux.xlsx")
+
+        # cleaning previous data after getting BBG data
+        self.interest_curve.loc['DEM'] = np.NaN
+        # list_of_all_tenors = [self.tenor_dict[x] * 12 for x in self.tenor_dict]
+        list_of_all_tenors = self.interest_curve.columns
+        list_of_all_tenors_aux = pd.Series(data=list_of_all_tenors, index=list_of_all_tenors)
+        # calendar_list = self.daily_calendar[self.daily_calendar > '1996-01-02']
+        calendar_list = df_bz_bbg_aux.index[df_bz_bbg_aux.index < '1998-12-01']
+        for dt in tqdm(calendar_list):
+            curve_series_aux = df_bz_bbg_aux.loc[dt].dropna()
+            # time_deta_aux = (curve_series_aux.index - dt)
+            # curve_series_aux.index = time_deta_aux.astype('timedelta64[D]') / 365 * 12
+            max_tenor_origin = curve_series_aux.index.max()
+            min_tenor_origin = curve_series_aux.index.min()
+            max_tenor_destination = list_of_all_tenors_aux.loc[list_of_all_tenors_aux >= max_tenor_origin].min()
+            tenors_to_fill = list_of_all_tenors_aux[((list_of_all_tenors_aux > 1) & (list_of_all_tenors_aux <= max_tenor_destination))].index
+            rates_to_fill = pd.Series(data=None, index=tenors_to_fill)
+            rates_to_fill[rates_to_fill.index < min_tenor_origin] = curve_series_aux.iloc[0]
+            rates_to_fill_aux = pd.DataFrame(rates_to_fill.append(curve_series_aux), columns=['rate'])
+            rates_to_fill_aux = rates_to_fill_aux.loc[~rates_to_fill_aux.index.duplicated(keep='last')].rate
+            rates_to_fill_aux.sort_index(axis=0, inplace=True)
+            rates_to_fill_aux.interpolate(method='index', axis=0, inplace=True)
+            rates_to_fill = rates_to_fill_aux.loc[rates_to_fill.index]
+            # Write values in self.interest_curve (adjusting only BRL curves)
+            for tenor_month in rates_to_fill.index:
+                self.interest_curve.loc[('DEM', dt), tenor_month] = rates_to_fill.loc[tenor_month]
+
